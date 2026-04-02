@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../constants/destinations.dart';
 import 'payment_screen.dart';
 import '../widgets/destination_card.dart';
+import 'explorePlaces.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -10,7 +11,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _selectedIndex = 2;
+  int _selectedIndex = 0;
 
   static const _navIcons = [
     Icons.home_outlined,
@@ -66,7 +67,18 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       bottomNavigationBar: _BottomNav(
         selectedIndex: _selectedIndex,
-        onTap: (i) => setState(() => _selectedIndex = i),
+        onTap: (i) {
+          if (i == 2) {
+            // INI DIA: Kalau diklik Search (Index 2), pindah ke kodingan Bima!
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const ExplorePlacesScreen()),
+            );
+          } else {
+            // Ikon lain tetap berfungsi seperti biasa
+            setState(() => _selectedIndex = i);
+          }
+        },
         icons: _navIcons,
       ),
     );

@@ -1,0 +1,131 @@
+const db = require('../config/database');
+
+// Get all destinations
+const getDestinations = async (req, res) => {
+    try {
+        const [destinations] = await db.promisePool.query(
+            `SELECT id_destination, nama_destination, lokasi, deskripsi, 
+                    harga, rating, reviews, gambar 
+             FROM destinations`
+        );
+        
+        // Format destinations with placeholder for images
+        const formattedDestinations = destinations.map(dest => ({
+            ...dest,
+            gambar: dest.gambar ? `data:image/jpeg;base64,${dest.gambar.toString('base64')}` : null,
+            price: `IDR ${(dest.harga || 0).toLocaleString()}`
+        }));
+
+        res.json({
+            success: true,
+            data: formattedDestinations
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error: ' + error.message 
+        });
+    }
+};
+
+// Get destination by ID
+const getDestinationById = async (req, res) => {
+    const { id } = req.params;
+    
+    try {
+        const [destinations] = await db.promisePool.query(
+            `SELECT id_destination, nama_destination, lokasi, deskripsi, 
+                    harga, rating, reviews, gambar 
+             FROM destinations WHERE id_destination = ?`,
+            [id]
+        );
+
+        if (destinations.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Destination not found'
+            });
+        }
+
+        const destination = {
+            ...destinations[0],
+            gambar: destinations[0].gambar ? `data:image/jpeg;base64,${destinations[0].gambar.toString('base64')}` : null,
+            price: `IDR ${(destinations[0].harga || 0).toLocaleString()}`
+        };
+
+        res.json({
+            success: true,
+            data: destination
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error: ' + error.message 
+        });
+    }
+};
+
+// Get popular destinations
+const getPopularDestinations = async (req, res) => {
+    try {
+        const [destinations] = await db.promisePool.query(
+            `SELECT id_destination, nama_destination, lokasi, deskripsi, 
+                    harga, rating, reviews, gambar 
+             FROM destinations 
+             ORDER BY rating DESC 
+             LIMIT 5`
+        );
+        
+        const formattedDestinations = destinations.map(dest => ({
+            ...dest,
+            gambar: dest.gambar ? `data:image/jpeg;base64,${dest.gambar.toString('base64')}` : null,
+            price: `IDR ${(dest.harga || 0).toLocaleString()}`
+        }));
+
+        res.json({
+            success: true,
+            data: formattedDestinations
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error: ' + error.message 
+        });
+    }
+};
+
+// Get schedules for a destination
+const getSchedulesByDestination = async (req, res) => {
+    const { id } = req.params;
+    
+    try {
+        const [schedules] = await db.promisePool.query(
+            `SELECT id_schedule, tanggal_trip, kuota, status 
+             FROM schedules 
+             WHERE id_destination = ? AND tanggal_trip >= CURDATE()
+             ORDER BY tanggal_trip ASC`,
+            [id]
+        );
+
+        res.json({
+            success: true,
+            data: schedules
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error: ' + error.message 
+        });
+    }
+};
+
+module.exports = { 
+    getDestinations, 
+    getDestinationById, 
+    getPopularDestinations,
+    getSchedulesByDestination 
+};

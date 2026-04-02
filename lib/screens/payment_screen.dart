@@ -1,13 +1,11 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../constants/colors.dart';
-import '../constants/destinations.dart';
-import '../widgets/app_text_field.dart';
-import '../widgets/gradient_button.dart';
+import '../services/api_service.dart';
 import 'transaction_complete_screen.dart';
 
 class PaymentScreen extends StatefulWidget {
-  final Destination destination;
+  final dynamic destination;
   const PaymentScreen({super.key, required this.destination});
 
   @override
@@ -29,12 +27,31 @@ class _PaymentScreenState extends State<PaymentScreen> {
   final TextEditingController _fullNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
 
-  int get _basePrice {
-    final raw = widget.destination.price.replaceAll(RegExp(r'[^0-9]'), '');
-    return int.tryParse(raw) ?? 0;
+  int _parsePrice(dynamic harga) {
+    if (harga == null) return 0;
+
+    try {
+      String priceStr = harga.toString();
+
+      // Remove decimal part (.00)
+      if (priceStr.contains('.')) {
+        priceStr = priceStr.substring(0, priceStr.indexOf('.'));
+      }
+
+      // Remove any non-numeric characters
+      priceStr = priceStr.replaceAll(RegExp(r'[^0-9]'), '');
+
+      if (priceStr.isEmpty) return 0;
+
+      return int.parse(priceStr);
+    } catch (e) {
+      return 0;
+    }
   }
 
-  int get _totalPrice => _basePrice * _pax * 1000;
+  int get _basePrice => _parsePrice(widget.destination['harga']);
+
+  int get _totalPrice => _basePrice * _pax;
 
   String _formatIDR(int amount) {
     final s = amount.toString();
@@ -325,20 +342,47 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   Future<void> _pay() async {
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 2));
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => TransactionCompleteScreen(
-          destination: widget.destination,
-          pax: _pax,
-          total: _totalPrice,
-          payMethod: _methods[_selectedPay].label,
-        ),
-      ),
-    );
+
+    try {
+      final orderData = {
+        'id_schedule': 1,
+        'jumlah_orang': _pax,
+        'total_price': _totalPrice + (_totalPrice * 0.11).round(),
+        'id_package': null,
+      };
+
+      final orderResult = await apiService.createOrder(orderData);
+
+      if (orderResult['success']) {
+        final paymentData = {
+          'id_order': orderResult['orderId'],
+          'metode_pembayaran': _methods[_selectedPay].label,
+          'total_bayar': _totalPrice + (_totalPrice * 0.11).round(),
+        };
+
+        await apiService.createPayment(paymentData);
+
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => TransactionCompleteScreen(
+              destination: widget.destination,
+              pax: _pax,
+              total: _totalPrice + (_totalPrice * 0.11).round(),
+              payMethod: _methods[_selectedPay].label,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Payment failed: ${e.toString()}')),
+      );
+    }
   }
 
   @override
@@ -424,35 +468,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
         children: [
           SizedBox(
             height: 160,
-            child: Image.network(
-              widget.destination.image,
-              width: double.infinity,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                height: 160,
-                color: const Color(0xFF2C3E50),
-                child: const Center(
-                    child: FaIcon(FontAwesomeIcons.image,
-                        color: Colors.white54, size: 60)),
-              ),
-              loadingBuilder: (_, child, progress) {
-                if (progress == null) return child;
-                return Container(
-                  height: 160,
-                  color: const Color(0xFF2C3E50),
-                  child: const Center(
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white54)),
-                );
-              },
-            ),
+            child: _buildDestinationImage(),
           ),
           Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.destination.name,
+                Text(widget.destination['nama_destination'] ?? 'Unknown',
                     style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
@@ -463,19 +486,53 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       color: Color(0xFFFFA000), size: 14),
                   const SizedBox(width: 4),
                   Text(
-                      '${widget.destination.rating} (${widget.destination.reviews} reviews)',
+                      '${widget.destination['rating']?.toString() ?? '0.0'} (${widget.destination['review'] ?? 0} reviews)',
                       style: const TextStyle(
                           color: Color(0xFFFFA000), fontSize: 12)),
                 ]),
                 const SizedBox(height: 6),
-                Text(widget.destination.desc,
-                    style: const TextStyle(
-                        color: Colors.white54, fontSize: 12, height: 1.5)),
+                Text(
+                  widget.destination['deskripsi'] == 'null' ||
+                          widget.destination['deskripsi'] == null
+                      ? 'No description available'
+                      : widget.destination['deskripsi'],
+                  style: const TextStyle(
+                      color: Colors.white54, fontSize: 12, height: 1.5),
+                ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDestinationImage() {
+    final gambar = widget.destination['gambar'];
+    if (gambar != null && gambar.toString().startsWith('data:image')) {
+      try {
+        final base64String = gambar.toString().split(',').last;
+        final bytes = apiService.base64ToBytes(base64String);
+        return Image.memory(
+          bytes,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _placeholderImage(),
+        );
+      } catch (e) {
+        return _placeholderImage();
+      }
+    }
+    return _placeholderImage();
+  }
+
+  Widget _placeholderImage() {
+    return Container(
+      height: 160,
+      color: const Color(0xFF2C3E50),
+      child: const Center(
+          child:
+              FaIcon(FontAwesomeIcons.image, color: Colors.white54, size: 60)),
     );
   }
 
@@ -504,7 +561,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(widget.destination.price,
+                Text(_formatIDR(_basePrice),
                     style:
                         const TextStyle(color: Colors.white60, fontSize: 12)),
                 const SizedBox(height: 2),
@@ -625,7 +682,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
         children: [
           _sectionLabel('Order Summary'),
           const SizedBox(height: 12),
-          _summaryRow('${widget.destination.name} × $_pax pax',
+          _summaryRow(
+              '${widget.destination['nama_destination'] ?? 'Destination'} × $_pax pax',
               _formatIDR(_totalPrice)),
           _summaryRow('Tax (11%)', _formatIDR(tax)),
           const Divider(color: Colors.white12, height: 24),
@@ -658,9 +716,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
       color: const Color(0xFF0A1A2B),
-      child: GradientButton(
-          'Pay ${_formatIDR(grandTotal)}', _isLoading ? () {} : _pay,
-          height: 56, radius: 16),
+      child: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : GradientButton('Pay ${_formatIDR(grandTotal)}', _pay,
+              height: 56, radius: 16),
     );
   }
 
@@ -689,4 +748,60 @@ class _PayMethod {
   final Color color;
   const _PayMethod(
       {required this.label, required this.icon, required this.color});
+}
+
+class GradientButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onPressed;
+  final double height;
+  final double radius;
+
+  const GradientButton(
+    this.label,
+    this.onPressed, {
+    super.key,
+    this.height = 52,
+    this.radius = 14,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: height,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF5BAEE0), Color(0xFF1565C0)],
+          ),
+          borderRadius: BorderRadius.circular(radius),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF1E88E5).withOpacity(0.35),
+              blurRadius: 14,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: ElevatedButton(
+          onPressed: onPressed,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(radius),
+            ),
+          ),
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../constants/destinations.dart';
+import '../services/api_service.dart';
 import 'payment_screen.dart';
 import '../widgets/destination_card.dart';
 
@@ -11,6 +11,10 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 2;
+  List<dynamic> _destinations = [];
+  List<dynamic> _popularDestinations = [];
+  bool _isLoading = true;
+  String? _error;
 
   static const _navIcons = [
     Icons.home_outlined,
@@ -19,6 +23,54 @@ class _HomeScreenState extends State<HomeScreen> {
     Icons.favorite_border,
     Icons.person_outline,
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDestinations();
+  }
+
+  Future<void> _loadDestinations() async {
+    try {
+      final destinations = await apiService.getDestinations();
+      final popular = await apiService.getPopularDestinations();
+      setState(() {
+        _destinations = destinations;
+        _popularDestinations = popular;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  // FIXED: Safe price formatter for the list
+  String _formatPrice(dynamic harga) {
+    if (harga == null) return 'Contact for price';
+
+    try {
+      String priceStr = harga.toString();
+      if (priceStr.contains('.')) {
+        priceStr = priceStr.substring(0, priceStr.indexOf('.'));
+      }
+      priceStr = priceStr.replaceAll(RegExp(r'[^0-9]'), '');
+      if (priceStr.isEmpty) return 'Contact for price';
+
+      int priceInt = int.parse(priceStr);
+      final s = priceInt.toString();
+      final buf = StringBuffer();
+      for (int i = 0; i < s.length; i++) {
+        if (i > 0 && (s.length - i) % 3 == 0) buf.write('.');
+        buf.write(s[i]);
+      }
+      return 'IDR ${buf.toString()}';
+    } catch (e) {
+      return 'Contact for price';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,25 +92,31 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               _buildHeader(),
               Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.only(bottom: 100),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildHeroText(),
-                      const SizedBox(height: 28),
-                      _buildSectionTitle('Best Destination'),
-                      const SizedBox(height: 14),
-                      _buildCards(),
-                      const SizedBox(height: 28),
-                      _buildSectionTitle('Popular Tours'),
-                      const SizedBox(height: 14),
-                      _buildList(),
-                      const SizedBox(height: 24),
-                    ],
-                  ),
-                ),
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _error != null
+                        ? Center(
+                            child: Text(_error!,
+                                style: const TextStyle(color: Colors.white)))
+                        : SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            padding: const EdgeInsets.only(bottom: 100),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildHeroText(),
+                                const SizedBox(height: 28),
+                                _buildSectionTitle('Best Destination'),
+                                const SizedBox(height: 14),
+                                _buildCards(),
+                                const SizedBox(height: 28),
+                                _buildSectionTitle('Popular Tours'),
+                                const SizedBox(height: 14),
+                                _buildList(),
+                                const SizedBox(height: 24),
+                              ],
+                            ),
+                          ),
               ),
             ],
           ),
@@ -87,7 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Icon(Icons.attach_money, color: Colors.white, size: 16),
                 SizedBox(width: 5),
-                Text('Indah',
+                Text('Points: 0',
                     style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
@@ -146,26 +204,50 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildCards() {
+    if (_popularDestinations.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 20),
+        child: Text('No destinations available',
+            style: TextStyle(color: Colors.white54)),
+      );
+    }
+
     return SizedBox(
       height: 380,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.only(left: 20, right: 8),
-        itemCount: kDestinations.length,
-        itemBuilder: (_, i) => DestinationCard(destination: kDestinations[i]),
+        itemCount: _popularDestinations.length,
+        itemBuilder: (_, i) =>
+            DestinationCard(destination: _popularDestinations[i]),
       ),
     );
   }
 
+  // FIXED: The popular tours list
   Widget _buildList() {
+    if (_destinations.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 20),
+        child:
+            Text('No tours available', style: TextStyle(color: Colors.white54)),
+      );
+    }
+
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      itemCount: kDestinations.length,
+      itemCount: _destinations.length,
       itemBuilder: (_, i) {
-        final d = kDestinations[i];
+        final d = _destinations[i];
+
+        // FIXED: Use the safe formatter for price
+        final price = _formatPrice(d['harga']);
+        final rating = d['rating']?.toString() ?? '0.0';
+        final reviews = d['review'] ?? 0;
+
         return GestureDetector(
           onTap: () => Navigator.push(
             context,
@@ -183,30 +265,14 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    d.image,
+                  child: Container(
                     width: 72,
                     height: 72,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      width: 72,
-                      height: 72,
-                      color: const Color(0xFF2C3E50).withOpacity(0.3),
-                      child: const Icon(Icons.broken_image,
+                    color: const Color(0xFF2C3E50).withOpacity(0.3),
+                    child: const Center(
+                      child: Icon(Icons.landscape,
                           color: Colors.white54, size: 36),
                     ),
-                    loadingBuilder: (_, child, progress) {
-                      if (progress == null) return child;
-                      return Container(
-                        width: 72,
-                        height: 72,
-                        color: const Color(0xFF2C3E50).withOpacity(0.3),
-                        child: const Center(
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white54),
-                        ),
-                      );
-                    },
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -214,7 +280,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(d.name,
+                      Text(d['nama_destination'] ?? 'Unknown',
                           style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -225,13 +291,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           const Icon(Icons.star,
                               color: Color(0xFFFFA000), size: 13),
                           const SizedBox(width: 4),
-                          Text('${d.rating}  •  ${d.price}',
+                          Text('$rating  •  $price',
                               style: const TextStyle(
                                   color: Colors.white60, fontSize: 12)),
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text(d.desc,
+                      Text(
+                          d['deskripsi'] == 'null' || d['deskripsi'] == null
+                              ? 'No description available'
+                              : d['deskripsi'],
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -253,14 +322,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Raised-bubble bottom nav
-//
-// Key rules that make it work:
-//   1. Scaffold.extendBody = true  →  body draws behind the nav bar.
-//   2. SizedBox height = bar + peek  →  gives vertical room for the bubble.
-//   3. AnimatedPositioned is a DIRECT child of Stack (not wrapped in anything).
-// ─────────────────────────────────────────────────────────────────────────────
+// Bottom navigation bar
 class _BottomNav extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onTap;
@@ -276,7 +338,7 @@ class _BottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     const double barH = 64;
     const double bubbleD = 52;
-    const double peekH = 22; // bubble pokes this many px above the bar
+    const double peekH = 22;
     const double totalH = barH + peekH;
 
     final int count = icons.length;
@@ -289,7 +351,6 @@ class _BottomNav extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // 1. Bar background
           Positioned(
             left: 0,
             right: 0,
@@ -310,8 +371,6 @@ class _BottomNav extends StatelessWidget {
               ),
             ),
           ),
-
-          // 2. Unselected icon taps
           Positioned(
             left: 0,
             right: 0,
@@ -337,8 +396,6 @@ class _BottomNav extends StatelessWidget {
               ),
             ),
           ),
-
-          // 3. Raised bubble — DIRECT Stack child so AnimatedPositioned works
           AnimatedPositioned(
             duration: const Duration(milliseconds: 270),
             curve: Curves.easeInOut,

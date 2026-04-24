@@ -1,33 +1,63 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../screens/payment_screen.dart';
+import '../screens/aboutDestination.dart';
+import '../screens/pax_selection_dialog.dart';
 import '../services/api_service.dart';
 
-class DestinationCard extends StatelessWidget {
+class DestinationCard extends StatefulWidget {
   final dynamic destination;
-  const DestinationCard({super.key, required this.destination});
+  final bool hideFavorite;
+  const DestinationCard({super.key, required this.destination, this.hideFavorite = false});
+
+  @override
+  State<DestinationCard> createState() => _DestinationCardState();
+}
+
+class _DestinationCardState extends State<DestinationCard> {
+  bool _isFavorite = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkFavoriteStatus();
+  }
+
+  Future<void> _checkFavoriteStatus() async {
+    // In a production app, you would check if this item is in the user's favorites list
+    // For now, we'll keep it simple
+  }
+
+  Future<void> _toggleFavorite() async {
+    final itemId = widget.destination['id_destination'];
+    try {
+      setState(() => _isFavorite = !_isFavorite);
+      await apiService.toggleFavorite(itemId, !_isFavorite);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(_isFavorite ? 'Added to favorites' : 'Removed from favorites'),
+        ));
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isFavorite = !_isFavorite);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update: $e')));
+    }
+  }
 
   String _formatPrice(dynamic harga) {
     if (harga == null) return 'Contact for price';
 
     try {
       String priceStr = harga.toString();
-
-      // Remove decimal part (.00)
       if (priceStr.contains('.')) {
         priceStr = priceStr.substring(0, priceStr.indexOf('.'));
       }
-
-      // Remove any non-numeric characters
       priceStr = priceStr.replaceAll(RegExp(r'[^0-9]'), '');
-
       if (priceStr.isEmpty) return 'Contact for price';
 
       int priceInt = int.parse(priceStr);
       if (priceInt == 0) return 'Contact for price';
 
-      // Format with thousand separators
       final s = priceInt.toString();
       final buf = StringBuffer();
       for (int i = 0; i < s.length; i++) {
@@ -42,15 +72,20 @@ class DestinationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final destination = widget.destination;
     final price = _formatPrice(destination['harga']);
-    final rating = destination['rating']?.toString() ?? '0.0';
-    final reviews = destination['review'] ?? 0;
+    
+    final List<dynamic> ratings = destination['ratings'] ?? [];
+    final double averageRating = ratings.isEmpty
+        ? 0.0
+        : ratings.map((r) => (r['rating'] as num)).reduce((a, b) => a + b) / ratings.length;
+    final String ratingScore = averageRating.toStringAsFixed(1);
 
     return GestureDetector(
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => PaymentScreen(destination: destination),
+          builder: (_) => DestinationDetailScreen(destination: destination),
         ),
       ),
       child: Container(
@@ -83,34 +118,35 @@ class DestinationCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      destination['nama_destination'] ?? 'Unknown',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            destination['nama_destination'] ?? 'Unknown',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            const Icon(Icons.star, color: Colors.amber, size: 14),
+                            Text(ratings.isEmpty ? ' New' : ' $ratingScore',
+                                style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                          ],
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        const FaIcon(
-                          FontAwesomeIcons.solidStar,
-                          color: Color(0xFFFFA000),
-                          size: 12,
-                        ),
-                        const SizedBox(width: 3),
-                        Expanded(
-                          child: Text(
-                            '$rating ($reviews Review)',
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFFFFA000),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
+                        const Icon(Icons.location_on, color: Colors.white38, size: 12),
+                        const SizedBox(width: 4),
+                        Text(destination['location'] ?? 'Unknown',
+                            style: const TextStyle(color: Colors.white38, fontSize: 11)),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -158,6 +194,7 @@ class DestinationCard extends StatelessWidget {
   }
 
   Widget _buildDestinationImage() {
+    final destination = widget.destination;
     if (destination['gambar'] != null &&
         destination['gambar'].toString().startsWith('data:image')) {
       try {
@@ -177,15 +214,10 @@ class DestinationCard extends StatelessWidget {
   }
 
   Widget _placeholderImage() {
-    return Container(
-      color: const Color(0xFF2C3E50).withOpacity(0.3),
-      child: const Center(
-        child: Icon(
-          Icons.landscape,
-          color: Colors.white54,
-          size: 48,
-        ),
-      ),
+    return Image.asset(
+      'assets/images/baluran.jpg',
+      width: double.infinity,
+      fit: BoxFit.cover,
     );
   }
 }

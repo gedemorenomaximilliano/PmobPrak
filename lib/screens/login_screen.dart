@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../constants/colors.dart';
-import '../widgets/app_text_field.dart';
+import '../widgets/gradient_button.dart';
+import '../services/api_service.dart';
+import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -10,7 +12,52 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final List<String> _sentences = [
+    "Ready for your next adventure?",
+    "Banyuwangi is waiting for you!",
+    "Pack your bags, explore the wonders.",
+    "Making memories, one trip at a time.",
+    "Discover the beauty of nature."
+  ];
+  int _currentSentenceIndex = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 4), (timer) {
+      if (mounted) {
+        setState(() {
+          _currentSentenceIndex = (_currentSentenceIndex + 1) % _sentences.length;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
   bool _obscurePassword = true;
+  bool _rememberMe = false;
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  bool _isLoading = false;
+
+  Future<void> _login() async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await apiService.login(_emailController.text, _passwordController.text);
+      if (!mounted) return;
+      Navigator.pushNamed(context, '/otp', arguments: {'email': _emailController.text, 'role': res['role']});
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,257 +65,84 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF1565C0), kSkyBlue],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+            colors: [Color(0xFF1976D2), Color(0xFF0D2B4E), Color(0xFF0A1A2B)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
           ),
         ),
         child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(28, 32, 28, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('Welcome Back', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
+                const SizedBox(height: 8),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 800),
+                  child: Text(
+                    _sentences[_currentSentenceIndex],
+                    key: ValueKey(_currentSentenceIndex),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 16, color: Colors.amber, fontStyle: FontStyle.italic),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                _buildTextField(_emailController, 'Email', Icons.email_outlined),
+                const SizedBox(height: 16),
+                _buildTextField(_passwordController, 'Password', Icons.lock_outline, isPassword: true),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Hello !',
-                      style: TextStyle(
-                        fontSize: 38,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
+                    Row(
+                      children: [
+                        Checkbox(value: _rememberMe, onChanged: (v) => setState(() => _rememberMe = v!), activeColor: Colors.white, checkColor: kBlueMid),
+                        const Text('Remember Me', style: TextStyle(color: Colors.white70)),
+                      ],
                     ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Experience a\nBreathtaking Adventure',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.white70,
-                        height: 1.4,
-                      ),
+                    TextButton(onPressed: () {}, child: const Text('Forgot Password?', style: TextStyle(color: Colors.white70))),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                _isLoading ? const CircularProgressIndicator(color: Colors.white) : GradientButton('Login', _login),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text("Don't have an account?", style: TextStyle(color: Colors.white70)),
+                    TextButton(
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SignUpScreen())),
+                      child: const Text('Sign Up', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 32),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(28, 32, 28, 24),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(36),
-                    ),
-                  ),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Login',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        AppTextField('Username', FieldIconType.person),
-                        const SizedBox(height: 14),
-                        AppTextField(
-                          'Password',
-                          FieldIconType.lock,
-                          obscure: _obscurePassword,
-                          isObscured: _obscurePassword,
-                          onToggle: () => setState(
-                            () => _obscurePassword = !_obscurePassword,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: () {},
-                            child: Text(
-                              'Forgot Password',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        GradientButton(
-                          'Login',
-                          () => Navigator.pushNamed(context, '/home'),
-                        ),
-                        const SizedBox(height: 24),
-                        Row(
-                          children: [
-                            Expanded(child: Divider(color: Colors.grey[300])),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                              ),
-                              child: Text(
-                                'Or Login with',
-                                style: TextStyle(
-                                  color: Colors.grey[500],
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                            Expanded(child: Divider(color: Colors.grey[300])),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _socialBtn(
-                              color: Colors.black,
-                              child: const FaIcon(
-                                FontAwesomeIcons.apple,
-                                color: Colors.white,
-                                size: 30,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            _socialBtn(
-                              color: Colors.white,
-                              border: Border.all(
-                                color: Colors.grey.shade200,
-                                width: 1.5,
-                              ),
-                              child: const FaIcon(
-                                FontAwesomeIcons.google,
-                                color: Color(0xFF4285F4),
-                                size: 26,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            _socialBtn(
-                              color: const Color(0xFF1877F2),
-                              child: const FaIcon(
-                                FontAwesomeIcons.facebookF,
-                                color: Colors.white,
-                                size: 26,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              "Don't have account? ",
-                              style: TextStyle(color: Colors.grey[600]),
-                            ),
-                            GestureDetector(
-                              onTap: () =>
-                                  Navigator.pushNamed(context, '/signup'),
-                              child: const Text(
-                                'Sign Up',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  color: kBlueMid,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _socialBtn({
-    required Color color,
-    required Widget child,
-    BoxBorder? border,
-  }) {
+  Widget _buildTextField(TextEditingController controller, String label, IconData icon, {bool isPassword = false}) {
     return Container(
-      width: 58,
-      height: 58,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(16),
-        border: border,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.10),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Center(child: child),
-    );
-  }
-}
-
-// Add GradientButton class if it's not in a separate file
-class GradientButton extends StatelessWidget {
-  final String label;
-  final VoidCallback onPressed;
-  final double height;
-  final double radius;
-
-  const GradientButton(
-    this.label,
-    this.onPressed, {
-    super.key,
-    this.height = 52,
-    this.radius = 14,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: height,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF5BAEE0), Color(0xFF1565C0)],
-          ),
-          borderRadius: BorderRadius.circular(radius),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF1E88E5).withOpacity(0.35),
-              blurRadius: 14,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: ElevatedButton(
-          onPressed: onPressed,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.transparent,
-            shadowColor: Colors.transparent,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(radius),
-            ),
-          ),
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-          ),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
+      child: TextField(
+        controller: controller,
+        obscureText: isPassword ? _obscurePassword : false,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.white60),
+          prefixIcon: Icon(icon, color: Colors.white60),
+          suffixIcon: isPassword
+              ? IconButton(
+                  icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.white60),
+                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                )
+              : null,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.all(16),
         ),
       ),
     );

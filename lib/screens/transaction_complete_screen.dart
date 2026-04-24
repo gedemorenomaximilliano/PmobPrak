@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../constants/destinations.dart';
 
 class TransactionCompleteScreen extends StatefulWidget {
-  final Destination destination;
+  final dynamic destination;
   final int pax;
   final int total;
   final String payMethod;
@@ -59,7 +59,7 @@ class _TransactionCompleteScreenState extends State<TransactionCompleteScreen>
 
   // Simple booking-code generator
   String get _bookingCode {
-    final hash = (widget.destination.name + widget.total.toString()).hashCode
+    final hash = (widget.destination['nama_destination']?.toString() ?? 'BW' + widget.total.toString()).hashCode
         .abs();
     return 'BW${hash.toRadixString(36).toUpperCase().padLeft(6, '0').substring(0, 6)}';
   }
@@ -104,7 +104,7 @@ class _TransactionCompleteScreenState extends State<TransactionCompleteScreen>
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'Your adventure to ${widget.destination.name} is secured.',
+                                'Your adventure to ${widget.destination['nama_destination'] ?? 'this location'} is secured.',
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   color: Colors.white60,
@@ -225,7 +225,7 @@ class _TransactionCompleteScreenState extends State<TransactionCompleteScreen>
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                _ticketRow('Destination', widget.destination.name),
+                _ticketRow('Destination', widget.destination['nama_destination'] ?? 'Unknown'),
                 _ticketRow('Booking Code', _bookingCode, accent: true),
                 _ticketRow('Visitors', '${widget.pax} pax'),
                 _ticketRow('Payment', widget.payMethod),

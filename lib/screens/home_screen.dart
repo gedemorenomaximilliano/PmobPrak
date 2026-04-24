@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'aboutDestination.dart';
 import '../services/api_service.dart';
 import 'payment_screen.dart';
 import '../widgets/destination_card.dart';
@@ -17,9 +18,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
 
   static const _navIcons = [
-    Icons.home_outlined,
-    Icons.shopping_cart_outlined,
     Icons.search_rounded,
+    Icons.shopping_cart_outlined,
+    Icons.home_outlined,
     Icons.favorite_border,
     Icons.person_outline,
   ];
@@ -44,6 +45,27 @@ class _HomeScreenState extends State<HomeScreen> {
         _error = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  void _onItemTapped(int index) {
+    switch (index) {
+      case 0:
+        Navigator.pushNamed(context, '/explore');
+        break;
+      case 1:
+        Navigator.pushNamed(context, '/cart');
+        break;
+      case 2:
+        _loadDestinations();
+        setState(() => _selectedIndex = 2);
+        break;
+      case 3:
+        Navigator.pushNamed(context, '/favorites');
+        break;
+      case 4:
+        Navigator.pushNamed(context, '/profile');
+        break;
     }
   }
 
@@ -110,7 +132,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 const SizedBox(height: 14),
                                 _buildCards(),
                                 const SizedBox(height: 28),
-                                _buildSectionTitle('Popular Tours'),
+                                _buildSectionTitle('New Tours'),
                                 const SizedBox(height: 14),
                                 _buildList(),
                                 const SizedBox(height: 24),
@@ -124,7 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       bottomNavigationBar: _BottomNav(
         selectedIndex: _selectedIndex,
-        onTap: (i) => setState(() => _selectedIndex = i),
+        onTap: _onItemTapped,
         icons: _navIcons,
       ),
     );
@@ -135,26 +157,39 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFA000),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.attach_money, color: Colors.white, size: 16),
-                SizedBox(width: 5),
-                Text('Points: 0',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13)),
-              ],
-            ),
+          FutureBuilder<Map<String, dynamic>>(
+            future: apiService.getUserProfile(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const CircularProgressIndicator(color: Colors.white, strokeWidth: 2);
+              }
+              final user = snapshot.data!;
+              return Row(
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: Colors.white24,
+                    backgroundImage: user['image'] != null
+                        ? NetworkImage(user['image'])
+                        : null,
+                    child: user['image'] == null
+                        ? const Icon(Icons.person, color: Colors.white, size: 20)
+                        : null,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    user['name'] ?? 'User',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const Spacer(),
-          const Icon(Icons.menu, color: Colors.white, size: 28),
         ],
       ),
     );
@@ -251,7 +286,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return GestureDetector(
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => PaymentScreen(destination: d)),
+            MaterialPageRoute(builder: (_) => DestinationDetailScreen(destination: d)),
           ),
           child: Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -381,7 +416,10 @@ class _BottomNav extends StatelessWidget {
                 children: List.generate(count, (i) {
                   if (i == selectedIndex) return SizedBox(width: slotW);
                   return GestureDetector(
-                    onTap: () => onTap(i),
+                    onTap: () {
+                      onTap(i);
+                      // Force rebuild to update gradient position
+                    },
                     behavior: HitTestBehavior.opaque,
                     child: SizedBox(
                       width: slotW,

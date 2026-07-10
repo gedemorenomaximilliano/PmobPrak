@@ -55,11 +55,33 @@ class ItemSeeder extends Seeder
             ],
         ];
 
+        $getImageBase64 = function($filename) {
+            $paths = [
+                database_path('seeders/images/' . $filename),
+                base_path('../assets/images/' . $filename),
+                base_path('assets/images/' . $filename),
+                database_path('seeders/' . $filename),
+            ];
+
+            foreach ($paths as $path) {
+                if (file_exists($path)) {
+                    $mime = 'image/jpeg';
+                    if (str_ends_with($filename, '.png')) {
+                        $mime = 'image/png';
+                    }
+                    return 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($path));
+                }
+            }
+
+            // Fallback to a valid tiny transparent 1x1 PNG base64 if not found
+            return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+        };
+
         $images = [
-            'Teluk Hijau' => 'data:image/jpeg;base64,' . base64_encode(file_get_contents('../assets/images/acidicLake.jpg')),
-            'Taman Nasional Baluran' => 'data:image/jpeg;base64,' . base64_encode(file_get_contents('../assets/images/baluran.jpg')),
-            'Pantai Boom' => 'data:image/jpeg;base64,' . base64_encode(file_get_contents('../assets/images/de-djawatan.jp.jpg')),
-            'Pulau Menjangan' => 'data:image/jpeg;base64,' . base64_encode(file_get_contents('../assets/images/kawahijenvolcano.jpg')),
+            'Teluk Hijau' => $getImageBase64('acidicLake.jpg'),
+            'Taman Nasional Baluran' => $getImageBase64('baluran.jpg'),
+            'Pantai Boom' => $getImageBase64('de-djawatan.jp.jpg'), // maps to de-djawatan.jp.jpg in original
+            'Pulau Menjangan' => $getImageBase64('kawahijenvolcano.jpg'), // maps to kawahijenvolcano.jpg in original
         ];
 
         foreach ($destinations as $dest) {

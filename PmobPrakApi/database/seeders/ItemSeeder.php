@@ -85,11 +85,20 @@ class ItemSeeder extends Seeder
         ];
 
         foreach ($destinations as $dest) {
-            Item::create([
-                'category_id' => $alam->id,
-                ...$dest,
-                'image' => $images[$dest['name']],
-            ]);
+            Item::firstOrCreate(
+                ['name' => $dest['name']],
+                [
+                    'category_id' => $alam->id,
+                    'description' => $dest['description'],
+                    'price' => $dest['price'],
+                    'stock' => $dest['stock'],
+                    'location' => $dest['location'],
+                    'date_start' => $dest['date_start'],
+                    'date_end' => $dest['date_end'],
+                    'rating' => $dest['rating'],
+                    'image' => $images[$dest['name']],
+                ]
+            );
         }
     }
 }

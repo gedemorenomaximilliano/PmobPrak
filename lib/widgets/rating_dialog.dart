@@ -24,6 +24,7 @@ class _RatingDialogState extends State<RatingDialog> {
       widget.onSubmitted();
       Navigator.pop(context, true);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);

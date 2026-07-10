@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../widgets/destination_card.dart';
+import '../screens/pax_selection_dialog.dart';
+import '../constants/colors.dart';
 
 class ExplorePlacesScreen extends StatefulWidget {
   const ExplorePlacesScreen({super.key});
@@ -12,11 +14,14 @@ class ExplorePlacesScreen extends StatefulWidget {
 class _ExplorePlacesScreenState extends State<ExplorePlacesScreen> {
   List<dynamic> _items = [];
   bool _isLoading = true;
+  String? _error;
+  Set<int> _favoriteIds = {};
 
   @override
   void initState() {
     super.initState();
     _fetchItems();
+    _loadFavorites();
   }
 
   Future<void> _fetchItems() async {
@@ -27,8 +32,56 @@ class _ExplorePlacesScreenState extends State<ExplorePlacesScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _error = e.toString();
+      });
     }
+  }
+
+  Future<void> _loadFavorites() async {
+    try {
+      final favorites = await apiService.getFavorites();
+      if (mounted) {
+        setState(() {
+          _favoriteIds = favorites
+              .map((f) => int.tryParse(f['item']?['id']?.toString() ?? '') ?? 0)
+              .where((id) => id > 0)
+              .toSet();
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _toggleFavorite(Map<String, dynamic> destination) async {
+    final itemId = int.tryParse(destination['id_destination']?.toString() ?? '') ?? 0;
+    if (itemId == 0) return;
+    final isFav = _favoriteIds.contains(itemId);
+    setState(() {
+      if (isFav) {
+        _favoriteIds.remove(itemId);
+      } else {
+        _favoriteIds.add(itemId);
+      }
+    });
+    try {
+      await apiService.toggleFavorite(itemId, isFav);
+    } catch (e) {
+      setState(() {
+        if (isFav) {
+          _favoriteIds.add(itemId);
+        } else {
+          _favoriteIds.remove(itemId);
+        }
+      });
+    }
+  }
+
+  void _showPaxDialog(Map<String, dynamic> destination) {
+    showDialog(
+      context: context,
+      builder: (_) => PaxSelectionDialog(destination: destination),
+    );
   }
 
   @override
@@ -54,26 +107,62 @@ class _ExplorePlacesScreenState extends State<ExplorePlacesScreen> {
                   style: TextStyle(
                     fontSize: 35,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: kAccent,
                   ),
                 ),
               ),
               Expanded(
                 child: _isLoading
-                    ? const Center(child: CircularProgressIndicator(color: Colors.white))
-                    : GridView.builder(
-                        padding: const EdgeInsets.all(20),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 15,
-                          mainAxisSpacing: 15,
-                          childAspectRatio: 0.65,
-                        ),
-                        itemCount: _items.length,
-                        itemBuilder: (context, index) {
-                          return DestinationCard(destination: _items[index]);
-                        },
-                      ),
+                    ? const Center(
+                        child: CircularProgressIndicator(color: Colors.white))
+                    : _error != null
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.error_outline,
+                                    color: Colors.white54, size: 48),
+                                const SizedBox(height: 16),
+                                Text(_error!,
+                                    style: const TextStyle(color: Colors.white70),
+                                    textAlign: TextAlign.center),
+                                const SizedBox(height: 16),
+                                TextButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _isLoading = true;
+                                        _error = null;
+                                      });
+                                      _fetchItems();
+                                    },
+                                    child: const Text('Retry',
+                                        style: TextStyle(color: Colors.white))),
+                              ],
+                            ),
+                          )
+                        : GridView.builder(
+                            padding: const EdgeInsets.all(20),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 15,
+                              mainAxisSpacing: 15,
+                              childAspectRatio: 0.58,
+                            ),
+                            itemCount: _items.length,
+                            itemBuilder: (context, index) {
+                              final d = _items[index];
+                              final itemId = int.tryParse(
+                                      d['id_destination']?.toString() ?? '') ??
+                                  0;
+                              return DestinationCard(
+                                destination: d,
+                                isFavorite: _favoriteIds.contains(itemId),
+                                onFavoriteToggle: () => _toggleFavorite(d),
+                                onAddToCart: () => _showPaxDialog(d),
+                              );
+                            },
+                          ),
               ),
             ],
           ),

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
-import '../constants/colors.dart';
-import '../widgets/gradient_button.dart';
 
 class TransactionHistoryScreen extends StatefulWidget {
   const TransactionHistoryScreen({super.key});
@@ -13,6 +11,7 @@ class TransactionHistoryScreen extends StatefulWidget {
 class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   List<dynamic> _transactions = [];
   bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -29,7 +28,10 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _error = e.toString();
+      });
     }
   }
 
@@ -53,7 +55,20 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
         ),
         child: _isLoading
             ? const Center(child: CircularProgressIndicator(color: Colors.white))
-            : ListView.builder(
+            : _error != null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, color: Colors.white54, size: 48),
+                        const SizedBox(height: 16),
+                        Text(_error!, style: const TextStyle(color: Colors.white70), textAlign: TextAlign.center),
+                        const SizedBox(height: 16),
+                        TextButton(onPressed: _loadTransactions, child: const Text('Retry', style: TextStyle(color: Colors.white))),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
                 padding: const EdgeInsets.only(top: 120, left: 20, right: 20),
                 itemCount: _transactions.length,
                 itemBuilder: (context, index) {
@@ -79,12 +94,12 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                                 color: tx['status'] == 'completed' ? Colors.green.withOpacity(0.2) : Colors.amber.withOpacity(0.2),
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Text(tx['status'].toUpperCase(), style: TextStyle(color: tx['status'] == 'completed' ? Colors.green : Colors.amber, fontSize: 10, fontWeight: FontWeight.bold)),
+                              child: Text((tx['status'] ?? 'UNKNOWN').toString().toUpperCase(), style: TextStyle(color: tx['status'] == 'completed' ? Colors.green : Colors.amber, fontSize: 10, fontWeight: FontWeight.bold)),
                             ),
                           ],
                         ),
                         const SizedBox(height: 8),
-                        Text('Rp ${tx['total_price']}', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                        Text('Rp ${tx['total_price'] ?? '0'}', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 4),
                         Text('User: ${tx['user']?['name'] ?? 'Admin'}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                       ],

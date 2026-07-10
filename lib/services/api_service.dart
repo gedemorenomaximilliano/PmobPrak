@@ -1,16 +1,35 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  // Use http://10.0.2.2:8000 for Android emulator
-  static const String baseUrl = 'http://127.0.0.1:8000/api';
+  // Change to http://10.0.2.2:8000/api for Android emulator
+  // Change to your PC's local IP for phone testing: http://YOUR_IP:8000/api
+  static const String baseUrl = 'http://192.168.1.48:8000/api';
+  static const String _tokenKey = 'auth_token';
 
   String? _authToken;
+  int? _userId;
+  late http.Client _client;
 
-  // Store token in memory
-  void saveToken(String token) {
+  int? get currentUserId => _userId;
+
+  ApiService() {
+    _client = http.Client();
+  }
+
+  // Load persisted token on app start
+  Future<void> init() async {
+    final prefs = await SharedPreferences.getInstance();
+    _authToken = prefs.getString(_tokenKey);
+  }
+
+  // Persist token to disk
+  Future<void> saveToken(String token) async {
     _authToken = token;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tokenKey, token);
   }
 
   // Get token
@@ -18,9 +37,33 @@ class ApiService {
     return _authToken;
   }
 
-  // Clear token
-  void clearToken() {
+  // Clear token from memory and disk
+  Future<void> clearToken() async {
     _authToken = null;
+    _userId = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tokenKey);
+  }
+
+  // Check if user is logged in
+  Future<bool> isLoggedIn() async {
+    if (_authToken != null) return true;
+    final prefs = await SharedPreferences.getInstance();
+    _authToken = prefs.getString(_tokenKey);
+    return _authToken != null;
+  }
+
+  // HTTP request with timeout
+  Future<http.Response> _get(Uri url, {Map<String, String>? headers}) {
+    return _client.get(url, headers: headers).timeout(const Duration(seconds: 15));
+  }
+
+  Future<http.Response> _post(Uri url, {Map<String, String>? headers, Object? body}) {
+    return _client.post(url, headers: headers, body: body).timeout(const Duration(seconds: 15));
+  }
+
+  Future<http.Response> _delete(Uri url, {Map<String, String>? headers, Object? body}) {
+    return _client.delete(url, headers: headers, body: body).timeout(const Duration(seconds: 15));
   }
 
   // Helper to convert base64 to bytes
@@ -33,13 +76,13 @@ class ApiService {
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      'Authorization': 'Bearer $_authToken',
+      if (_authToken != null) 'Authorization': 'Bearer $_authToken',
     };
   }
 
   // Login
   Future<Map<String, dynamic>> login(String email, String password) async {
-    final response = await http.post(
+    final response = await _post(
       Uri.parse('$baseUrl/login'),
       headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
       body: json.encode({'email': email, 'password': password}),
@@ -47,15 +90,33 @@ class ApiService {
 
     final data = json.decode(response.body);
     if (response.statusCode == 200) {
-      saveToken(data['access_token']);
+      await saveToken(data['access_token']);
+      _userId = data['user']?['id'] ?? int.tryParse(data['id']?.toString() ?? '');
       return {...data, 'success': true, 'token': data['access_token']};
     }
     throw Exception(data['message'] ?? 'Login failed');
   }
 
+  // Google Login
+  Future<Map<String, dynamic>> googleLogin(String idToken) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/login/google'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({'id_token': idToken}),
+    );
+
+    final data = json.decode(response.body);
+    if (response.statusCode == 200) {
+      await saveToken(data['access_token']);
+      _userId = data['user']?['id'] ?? int.tryParse(data['id']?.toString() ?? '');
+      return {...data, 'success': true, 'token': data['access_token']};
+    }
+    throw Exception(data['message'] ?? 'Google login failed');
+  }
+
   // Register
   Future<Map<String, dynamic>> register(Map<String, dynamic> userData) async {
-    final response = await http.post(
+    final response = await _post(
       Uri.parse('$baseUrl/register'),
       headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
       body: json.encode(userData),
@@ -63,15 +124,26 @@ class ApiService {
 
     final data = json.decode(response.body);
     if (response.statusCode == 200) {
-      saveToken(data['access_token']);
+      await saveToken(data['access_token']);
+      _userId = data['user']?['id'] ?? int.tryParse(data['id']?.toString() ?? '');
       return {...data, 'success': true, 'token': data['access_token']};
     }
     throw Exception(data['message'] ?? 'Registration failed');
   }
 
+  // Logout — call server and clear local token
+  Future<void> logout() async {
+    try {
+      await _post(Uri.parse('$baseUrl/logout'), headers: _getHeaders());
+    } catch (_) {
+      // Server logout is best-effort; still clear local token
+    }
+    await clearToken();
+  }
+
   // Get Categories
   Future<List<dynamic>> getCategories() async {
-    final response = await http.get(
+    final response = await _get(
       Uri.parse('$baseUrl/categories'),
       headers: _getHeaders(),
     );
@@ -89,7 +161,7 @@ class ApiService {
 
   // Get Items
   Future<List<dynamic>> getItems() async {
-    final response = await http.get(
+    final response = await _get(
       Uri.parse('$baseUrl/items'),
       headers: _getHeaders(),
     );
@@ -109,6 +181,10 @@ class ApiService {
           'date_start': item['date_start'],
           'date_end': item['date_end'],
           'images': item['images'] ?? [],
+          'location': item['location'],
+          'category': item['category'],
+          'itinerary': item['itinerary'],
+          'itinerary_items': item['itinerary_items'] ?? [],
         };
       }).toList();
     }
@@ -117,7 +193,7 @@ class ApiService {
 
   // Get Destination by ID
   Future<Map<String, dynamic>> getDestinationById(int id) async {
-    final response = await http.get(
+    final response = await _get(
       Uri.parse('$baseUrl/items/$id'),
       headers: _getHeaders(),
     );
@@ -139,6 +215,8 @@ class ApiService {
         'location': item['location'],
         'date_start': item['date_start'],
         'date_end': item['date_end'],
+        'itinerary': item['itinerary'],
+        'itinerary_items': item['itinerary_items'] ?? [],
       };
     }
     throw Exception(data['message'] ?? 'Failed to load item');
@@ -146,7 +224,7 @@ class ApiService {
 
   // Create Item
   Future<Map<String, dynamic>> createItem(Map<String, dynamic> itemData) async {
-    final response = await http.post(
+    final response = await _post(
       Uri.parse('$baseUrl/items'),
       headers: _getHeaders(),
       body: json.encode(itemData),
@@ -180,7 +258,7 @@ class ApiService {
   // Create Transaction
   Future<Map<String, dynamic>> createTransaction(
       Map<String, dynamic> transactionData) async {
-    final response = await http.post(
+    final response = await _post(
       Uri.parse('$baseUrl/transactions'),
       headers: _getHeaders(),
       body: json.encode(transactionData),
@@ -200,9 +278,38 @@ class ApiService {
     return {'success': true, 'message': 'Payment successful'};
   }
 
+  // Midtrans Snap token
+  Future<Map<String, dynamic>> createSnapToken(int orderId) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/payment/snap-token'),
+      headers: _getHeaders(),
+      body: json.encode({'order_id': orderId}),
+    );
+
+    final data = json.decode(response.body);
+    if (response.statusCode == 200 && data['success']) {
+      return data;
+    }
+    throw Exception(data['message'] ?? 'Failed to create snap token');
+  }
+
+  // Get transaction status
+  Future<Map<String, dynamic>> getTransactionStatus(int orderId) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/transactions/$orderId'),
+      headers: _getHeaders(),
+    );
+
+    final data = json.decode(response.body);
+    if (response.statusCode == 200 && data['success']) {
+      return data['data'];
+    }
+    throw Exception(data['message'] ?? 'Failed to get transaction status');
+  }
+
   // Get User Transactions
   Future<List<dynamic>> getUserTransactions() async {
-    final response = await http.get(
+    final response = await _get(
       Uri.parse('$baseUrl/transactions'),
       headers: _getHeaders(),
     );
@@ -216,13 +323,14 @@ class ApiService {
 
   // Get User Profile
   Future<Map<String, dynamic>> getUserProfile() async {
-    final response = await http.get(
+    final response = await _get(
       Uri.parse('$baseUrl/user'), // Ensure this endpoint exists in Laravel
       headers: _getHeaders(),
     );
 
     final data = json.decode(response.body);
     if (response.statusCode == 200) {
+      _userId = data['user']?['id'] ?? data['id'] ?? int.tryParse(data['data']?['id']?.toString() ?? '');
       return data;
     }
     throw Exception('Failed to load profile');
@@ -230,7 +338,7 @@ class ApiService {
 
   // Favorite Methods
   Future<List<dynamic>> getFavorites() async {
-    final response = await http.get(Uri.parse('$baseUrl/favorites'), headers: _getHeaders());
+    final response = await _get(Uri.parse('$baseUrl/favorites'), headers: _getHeaders());
     final data = json.decode(response.body);
     if (response.statusCode == 200 && data['success']) {
       return data['data'];
@@ -239,24 +347,16 @@ class ApiService {
   }
 
   Future<void> toggleFavorite(int itemId, bool isFavorite) async {
-    final method = isFavorite ? http.delete : http.post;
-    final uri = isFavorite ? Uri.parse('$baseUrl/favorites/$itemId') : Uri.parse('$baseUrl/favorites');
-    final body = isFavorite ? null : json.encode({'item_id': itemId});
-    
-    await method(uri, headers: _getHeaders(), body: body);
+    if (isFavorite) {
+      await _delete(Uri.parse('$baseUrl/favorites/$itemId'), headers: _getHeaders());
+    } else {
+      await _post(Uri.parse('$baseUrl/favorites'), headers: _getHeaders(), body: json.encode({'item_id': itemId}));
+    }
   }
 
-  // OTP Verification Simulation
-  Future<Map<String, dynamic>> verifyOTP(String email, String otp) async {
-    // Simulation
-    if (otp == "123456") {
-      return {'success': true};
-    }
-    throw Exception('Invalid OTP');
-  }
   // Submit Rating
   Future<Map<String, dynamic>> submitRating(int itemId, int rating, String comment) async {
-    final response = await http.post(
+    final response = await _post(
       Uri.parse('$baseUrl/ratings'),
       headers: _getHeaders(),
       body: json.encode({'item_id': itemId, 'rating': rating, 'comment': comment}),
@@ -270,7 +370,7 @@ class ApiService {
   }
   // Delete Rating
   Future<Map<String, dynamic>> deleteRating(int ratingId) async {
-    final response = await http.delete(
+    final response = await _delete(
       Uri.parse('$baseUrl/ratings/$ratingId'),
       headers: _getHeaders(),
     );
@@ -280,6 +380,33 @@ class ApiService {
       return data;
     }
     throw Exception(data['message'] ?? 'Failed to delete rating');
+  }
+
+  // Get Admin Dashboard Stats
+  Future<Map<String, dynamic>> getAdminDashboard() async {
+    final response = await _get(
+      Uri.parse('$baseUrl/admin/dashboard'),
+      headers: _getHeaders(),
+    );
+
+    final data = json.decode(response.body);
+    if (response.statusCode == 200 && data['success']) {
+      return data['data'];
+    }
+    throw Exception(data['message'] ?? 'Failed to load dashboard');
+  }
+
+  // Delete Item
+  Future<void> deleteItem(int itemId) async {
+    final response = await _delete(
+      Uri.parse('$baseUrl/items/$itemId'),
+      headers: _getHeaders(),
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      final data = json.decode(response.body);
+      throw Exception(data['message'] ?? 'Failed to delete item');
+    }
   }
 }
 

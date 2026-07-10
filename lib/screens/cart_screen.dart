@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/cart_service.dart';
-import '../constants/colors.dart';
 import '../widgets/gradient_button.dart';
 import 'payment_screen.dart';
 
@@ -59,7 +58,14 @@ class _CartScreenState extends State<CartScreen> {
                               width: 50,
                               height: 50,
                               child: (item['gambar'] != null && item['gambar'].toString().startsWith('data:image'))
-                                  ? Image.memory(apiService.base64ToBytes(item['gambar'].toString().split(',').last), fit: BoxFit.cover)
+                                  ? Builder(builder: (ctx) {
+                                      try {
+                                        final bytes = apiService.base64ToBytes(item['gambar'].toString().split(',').last);
+                                        return Image.memory(bytes, fit: BoxFit.cover);
+                                      } catch (e) {
+                                        return Container(color: Colors.white24, child: const Icon(Icons.landscape, color: Colors.white54));
+                                      }
+                                    })
                                   : Container(color: Colors.white24, child: const Icon(Icons.landscape, color: Colors.white54)),
                             ),
                           ),
@@ -92,7 +98,10 @@ class _CartScreenState extends State<CartScreen> {
                       const SizedBox(height: 20),
                       GradientButton('Checkout All', () {
                         if (cartService.items.isNotEmpty) {
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentScreen(destination: cartService.items.first)));
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentScreen(
+                            destination: cartService.items.first,
+                            destinations: List.from(cartService.items),
+                          )));
                         }
                       }),
                     ],

@@ -15,9 +15,15 @@ class TransactionController extends Controller
     {
         $user = auth()->user();
         if ($user->role === 'admin') {
-            $transactions = Transaction::with('details.item', 'user')->get();
+            $transactions = Transaction::with('details.item', 'user')
+                ->latest()
+                ->take(50)
+                ->get();
         } else {
-            $transactions = $user->transactions()->with('details.item')->get();
+            $transactions = $user->transactions()
+                ->with('details.item')
+                ->latest()
+                ->get();
         }
 
         return response()->json([
@@ -32,6 +38,7 @@ class TransactionController extends Controller
             'items' => 'required|array',
             'items.*.id' => 'required|exists:items,id',
             'items.*.quantity' => 'required|integer|min:1',
+            'tax_rate' => 'nullable|numeric|min:0|max:1',
         ]);
 
         return DB::transaction(function () use ($request) {
@@ -54,10 +61,14 @@ class TransactionController extends Controller
                 ];
             }
 
+            $taxRate = $request->input('tax_rate', 0.11);
+            $tax = round($totalPrice * $taxRate);
+            $grandTotal = $totalPrice + $tax;
+
             $transaction = Transaction::create([
                 'user_id' => auth()->id(),
-                'total_price' => $totalPrice,
-                'status' => 'completed'
+                'total_price' => $grandTotal,
+                'status' => 'pending',
             ]);
 
             foreach ($itemsToProcess as $processData) {
@@ -80,7 +91,8 @@ class TransactionController extends Controller
 
     public function show(Transaction $transaction)
     {
-        if ($transaction->user_id !== auth()->id()) {
+        $user = auth()->user();
+        if ($user->role !== 'admin' && $transaction->user_id !== $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 

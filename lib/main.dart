@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import 'constants/colors.dart';
 import 'screens/splash_screen.dart';
@@ -12,11 +13,11 @@ import 'screens/profile_screen.dart';
 import 'screens/admin_add_item_screen.dart';
 import 'screens/explorePlaces.dart';
 import 'screens/favorites_screen.dart';
-import 'screens/otp_verification_screen.dart';
 import 'screens/transaction_history_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -36,18 +37,6 @@ class JejakBanyuwangiApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: kBlueMid)),
       initialRoute: '/',
-      onGenerateRoute: (settings) {
-        if (settings.name == '/otp') {
-          final args = settings.arguments as Map<String, dynamic>;
-          return MaterialPageRoute(
-            builder: (context) => OtpVerificationScreen(
-              email: args['email'],
-              role: args['role'],
-            ),
-          );
-        }
-        return null;
-      },
       routes: {
         '/': (_) => const SplashScreen(),
         '/login': (_) => const LoginScreen(),

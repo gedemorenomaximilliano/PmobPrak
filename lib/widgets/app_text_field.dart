@@ -12,6 +12,7 @@ class AppTextField extends StatelessWidget {
   final VoidCallback? onToggle;
   final Color bgColor;
   final bool hasShadow;
+  final TextEditingController? controller;
 
   const AppTextField(
     this.hint,
@@ -22,6 +23,7 @@ class AppTextField extends StatelessWidget {
     this.onToggle,
     this.bgColor = const Color(0xFFE3F2FD),
     this.hasShadow = false,
+    this.controller,
   });
 
   IconData _getIcon() {
@@ -56,6 +58,7 @@ class AppTextField extends StatelessWidget {
             : null,
       ),
       child: TextField(
+        controller: controller,
         obscureText: obscure,
         decoration: InputDecoration(
           hintText: hint,

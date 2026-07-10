@@ -6,21 +6,21 @@ import 'package:http/http.dart' as http;
 import '../services/api_service.dart';
 import '../widgets/gradient_button.dart';
 
-class AdminAddItemScreen extends StatefulWidget {
-  const AdminAddItemScreen({super.key});
+class AdminEditItemScreen extends StatefulWidget {
+  final Map<String, dynamic> item;
+  const AdminEditItemScreen({super.key, required this.item});
 
   @override
-  State<AdminAddItemScreen> createState() => _AdminAddItemScreenState();
+  State<AdminEditItemScreen> createState() => _AdminEditItemScreenState();
 }
 
-class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
+class _AdminEditItemScreenState extends State<AdminEditItemScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _locationController = TextEditingController();
-  final _descController = TextEditingController();
-  final _priceController = TextEditingController();
-  final _stockController = TextEditingController();
-  final List<_ItineraryEntry> _itineraryEntries = [];
+  late final TextEditingController _nameController;
+  late final TextEditingController _locationController;
+  late final TextEditingController _descController;
+  late final TextEditingController _priceController;
+  late final TextEditingController _stockController;
 
   DateTime? _startDate;
   DateTime? _endDate;
@@ -31,6 +31,7 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
   List<dynamic> _categories = [];
   bool _isLoading = false;
   bool _categoriesLoading = true;
+  final List<_ItineraryEntry> _itineraryEntries = [];
 
   final Map<String, String?> _fieldErrors = {};
   String? _imageError;
@@ -39,14 +40,61 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
   @override
   void initState() {
     super.initState();
+    final item = widget.item;
+    _nameController = TextEditingController(text: item['nama_destination'] ?? '');
+    _locationController = TextEditingController(text: item['location'] ?? '');
+    _descController = TextEditingController(text: item['deskripsi'] == 'null' ? '' : (item['deskripsi'] ?? ''));
+    _priceController = TextEditingController(text: item['harga']?.toString() ?? '');
+    _stockController = TextEditingController(text: item['stock']?.toString() ?? '');
+    final existingItems = item['itinerary_items'] as List?;
+    if (existingItems != null && existingItems.isNotEmpty) {
+      for (final ii in existingItems) {
+        _itineraryEntries.add(_ItineraryEntry(
+          time: ii['time']?.toString() ?? '',
+          activity: ii['activity']?.toString() ?? '',
+        ));
+      }
+    }
+
+    if (item['date_start'] != null && item['date_start'] != 'null') {
+      try {
+        _startDate = DateTime.parse(item['date_start'].toString());
+      } catch (_) {}
+    }
+    if (item['date_end'] != null && item['date_end'] != 'null') {
+      try {
+        _endDate = DateTime.parse(item['date_end'].toString());
+      } catch (_) {}
+    }
+
     _loadCategories();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _locationController.dispose();
+    _descController.dispose();
+    _priceController.dispose();
+    _stockController.dispose();
+    for (final e in _itineraryEntries) {
+      e.timeController.dispose();
+      e.activityController.dispose();
+    }
+    super.dispose();
   }
 
   Future<void> _loadCategories() async {
     try {
       final categories = await apiService.getCategories();
+      final itemCategory = widget.item['category'];
+      int? preselectedId;
+      if (itemCategory != null) {
+        preselectedId = itemCategory['id'];
+      }
       setState(() {
         _categories = categories;
+        _selectedCategoryId = preselectedId;
         _categoriesLoading = false;
       });
     } catch (e) {
@@ -126,8 +174,8 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
   Future<void> _selectDate(bool isStart) async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now(),
+      initialDate: isStart ? (_startDate ?? DateTime.now()) : (_endDate ?? DateTime.now()),
+      firstDate: DateTime(2020),
       lastDate: DateTime(2100),
     );
     if (picked != null) {
@@ -141,6 +189,8 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
     }
   }
 
+  int get _itemId => int.tryParse(widget.item['id_destination']?.toString() ?? '') ?? 0;
+
   Future<void> _submit() async {
     _fieldErrors.clear();
     setState(() {
@@ -148,36 +198,24 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
       _generalError = null;
     });
 
-    final errors = <String, String>{};
     if (!_formKey.currentState!.validate()) {
-      errors['form'] = 'Please fix the highlighted fields';
-    }
-    if (_thumbnail == null) {
-      setState(() => _imageError = 'Thumbnail image is required');
-      errors['image'] = 'required';
+      _showError('Please fix the highlighted fields');
+      return;
     }
     if (_selectedCategoryId == null) {
-      errors['category'] = 'Please select a category';
-    }
-    if (_startDate == null || _endDate == null) {
-      errors['dates'] = 'Please select both start and end dates';
-    }
-
-    if (errors.isNotEmpty) {
-      String msg = 'Please fill all fields';
-      if (errors.containsKey('image')) msg += ', select a thumbnail';
-      if (errors.containsKey('category')) msg += ', select a category';
-      if (errors.containsKey('dates')) msg += ', select dates';
-      _showError(msg);
+      _showError('Please select a category');
       return;
     }
 
     setState(() => _isLoading = true);
     try {
       var request = http.MultipartRequest(
-          'POST', Uri.parse('${ApiService.baseUrl}/items'));
-      request.headers
-          .addAll({'Authorization': 'Bearer ${apiService.getToken()}'});
+          'POST', Uri.parse('${ApiService.baseUrl}/items/$_itemId'));
+      request.headers.addAll({
+        'Authorization': 'Bearer ${apiService.getToken()}',
+        'X-HTTP-Method-Override': 'PUT',
+      });
+      request.fields['_method'] = 'PUT';
       request.fields['category_id'] = _selectedCategoryId.toString();
       request.fields['name'] = _nameController.text;
       request.fields['location'] = _locationController.text;
@@ -192,15 +230,21 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
               })
           .toList();
       request.fields['itinerary_items'] = json.encode(itineraryJson);
-      request.fields['date_start'] = _startDate.toString().split(' ')[0];
-      request.fields['date_end'] = _endDate.toString().split(' ')[0];
+      if (_startDate != null) {
+        request.fields['date_start'] = _startDate.toString().split(' ')[0];
+      }
+      if (_endDate != null) {
+        request.fields['date_end'] = _endDate.toString().split(' ')[0];
+      }
 
-      final thumbnailBytes = await _thumbnail!.readAsBytes();
-      request.files.add(http.MultipartFile.fromBytes(
-        'image_file',
-        thumbnailBytes,
-        filename: _thumbnail!.name,
-      ));
+      if (_thumbnail != null) {
+        final thumbnailBytes = await _thumbnail!.readAsBytes();
+        request.files.add(http.MultipartFile.fromBytes(
+          'image_file',
+          thumbnailBytes,
+          filename: _thumbnail!.name,
+        ));
+      }
 
       for (int i = 0; i < _extraImages.length; i++) {
         final imageBytes = await _extraImages[i].readAsBytes();
@@ -214,9 +258,9 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
 
-      if (response.statusCode == 201) {
+      if (response.statusCode == 200 || response.statusCode == 302) {
         if (!mounted) return;
-        _showSuccess('Destination created successfully');
+        _showSuccess('Destination updated successfully');
         Navigator.pop(context, true);
       } else {
         String errorMsg = 'Server error ${response.statusCode}';
@@ -226,8 +270,8 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
                   (response.body.isNotEmpty) ? (response.body as dynamic) : {}));
           if (body['message'] != null) errorMsg = body['message'];
           if (body['errors'] != null) {
-            final errs = body['errors'] as Map;
-            errs.forEach((key, value) {
+            final errors = body['errors'] as Map;
+            errors.forEach((key, value) {
               final msg = (value is List) ? value.first.toString() : value.toString();
               if (key == 'image_file') {
                 setState(() => _imageError = msg);
@@ -304,7 +348,7 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Itinerary Items (optional)',
+              const Text('Itinerary Items',
                   style: TextStyle(color: Colors.white60, fontSize: 12)),
               const SizedBox(height: 2),
               const Text('Add time & activity for each item',
@@ -389,6 +433,10 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
   }
 
   Widget _buildImageSection() {
+    final hasExistingImage = widget.item['gambar'] != null &&
+        widget.item['gambar'].toString().startsWith('data:image');
+    final hasNewThumbnail = _thumbnail != null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -396,9 +444,10 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
           children: [
             Expanded(
               child: _buildImagePickerButton(
-                label: _thumbnail == null ? 'Thumbnail *' : 'Thumbnail OK',
+                label: _thumbnail == null ? 'Change Thumbnail' : 'Thumbnail Selected',
                 icon: Icons.camera_alt,
                 isSelected: _thumbnail != null,
+                hasExisting: hasExistingImage,
                 onTap: () => _pickImage(true),
               ),
             ),
@@ -408,6 +457,7 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
                 label: 'Extra (${_extraImages.length})',
                 icon: Icons.add_photo_alternate,
                 isSelected: _extraImages.isNotEmpty,
+                hasExisting: false,
                 onTap: () => _pickImage(false),
               ),
             ),
@@ -427,37 +477,63 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
               ],
             ),
           ),
-        if (_thumbnail != null) ...[
+        if (hasExistingThumbnail || _thumbnail != null) ...[
           const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              height: 160,
-              width: double.infinity,
-              color: Colors.white.withOpacity(0.05),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.file(File(_thumbnail!.path), fit: BoxFit.cover),
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.8),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text('Selected',
-                          style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          _buildImagePreview(),
         ],
       ],
+    );
+  }
+
+  bool get hasExistingThumbnail =>
+      widget.item['gambar'] != null &&
+      widget.item['gambar'].toString().startsWith('data:image');
+
+  Widget _buildImagePreview() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        height: 160,
+        width: double.infinity,
+        color: Colors.white.withOpacity(0.05),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (_thumbnail != null)
+              Image.file(File(_thumbnail!.path), fit: BoxFit.cover)
+            else if (hasExistingThumbnail)
+              Image.memory(
+                apiService.base64ToBytes(
+                    widget.item['gambar'].toString().split(',').last),
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Center(
+                  child: Icon(Icons.broken_image, color: Colors.white38, size: 40),
+                ),
+              )
+            else
+              const Center(
+                child: Icon(Icons.image, color: Colors.white38, size: 40),
+              ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _thumbnail != null
+                      ? Colors.green.withOpacity(0.8)
+                      : Colors.blue.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _thumbnail != null ? 'New Image' : 'Current',
+                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -465,6 +541,7 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
     required String label,
     required IconData icon,
     required bool isSelected,
+    required bool hasExisting,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
@@ -474,28 +551,41 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
         decoration: BoxDecoration(
           color: isSelected
               ? Colors.green.withOpacity(0.15)
-              : Colors.white.withOpacity(0.08),
+              : hasExisting
+                  ? Colors.blue.withOpacity(0.1)
+                  : Colors.white.withOpacity(0.08),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected
                 ? Colors.green.withOpacity(0.5)
-                : _imageError != null
-                    ? Colors.red.withOpacity(0.4)
+                : hasExisting
+                    ? Colors.blue.withOpacity(0.3)
                     : Colors.white.withOpacity(0.12),
           ),
         ),
         child: Column(
           children: [
             Icon(icon,
-                color: isSelected ? Colors.green : Colors.white54,
+                color: isSelected
+                    ? Colors.green
+                    : hasExisting
+                        ? Colors.blue.shade300
+                        : Colors.white54,
                 size: 24),
             const SizedBox(height: 6),
             Text(label,
                 style: TextStyle(
-                  color: isSelected ? Colors.green : Colors.white70,
+                  color: isSelected
+                      ? Colors.green
+                      : hasExisting
+                          ? Colors.blue.shade300
+                          : Colors.white70,
                   fontSize: 12,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                 )),
+            if (hasExisting && !isSelected)
+              const Text('(has image)',
+                  style: TextStyle(color: Colors.white38, fontSize: 10)),
           ],
         ),
       ),
@@ -507,7 +597,7 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-          title: const Text('Add New Destination',
+          title: const Text('Edit Destination',
               style: TextStyle(color: Colors.white)),
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -582,20 +672,23 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
                             items: _categories
                                 .map<DropdownMenuItem<int>>((c) =>
                                     DropdownMenuItem<int>(
-                                        value: c['id'], child: Text(c['name'])))
+                                        value: c['id'],
+                                        child: Text(c['name'])))
                                 .toList(),
                             onChanged: (val) =>
                                 setState(() => _selectedCategoryId = val),
-                            decoration:
-                                const InputDecoration(border: InputBorder.none),
+                            decoration: const InputDecoration(
+                                border: InputBorder.none),
                           ),
                         ),
                       const SizedBox(height: 12),
                       _buildField(_nameController, 'Name / Package', fieldKey: 'name'),
                       _buildField(_locationController, 'Location', fieldKey: 'location'),
                       _buildField(_descController, 'Description', fieldKey: 'description'),
-                      _buildField(_priceController, 'Price', isNumber: true, fieldKey: 'price'),
-                      _buildField(_stockController, 'Stock', isNumber: true, fieldKey: 'stock'),
+                      _buildField(_priceController, 'Price',
+                          isNumber: true, fieldKey: 'price'),
+                      _buildField(_stockController, 'Stock',
+                          isNumber: true, fieldKey: 'stock'),
                       const SizedBox(height: 12),
                       _buildItineraryField(),
                       const SizedBox(height: 10),
@@ -605,21 +698,21 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
                               child: ElevatedButton(
                                   onPressed: () => _selectDate(true),
                                   child: Text(_startDate == null
-                                      ? "Start Date *"
+                                      ? "Start Date"
                                       : "Start: ${_startDate.toString().split(' ')[0]}"))),
                           const SizedBox(width: 10),
                           Expanded(
                               child: ElevatedButton(
                                   onPressed: () => _selectDate(false),
                                   child: Text(_endDate == null
-                                      ? "End Date *"
+                                      ? "End Date"
                                       : "End: ${_endDate.toString().split(' ')[0]}"))),
                         ],
                       ),
                       const SizedBox(height: 20),
                       _buildImageSection(),
                       const SizedBox(height: 32),
-                      GradientButton('Save Destination', _submit),
+                      GradientButton('Update Destination', _submit),
                     ],
                   ),
                 ),
@@ -630,6 +723,10 @@ class _AdminAddItemScreenState extends State<AdminAddItemScreen> {
 }
 
 class _ItineraryEntry {
-  final TextEditingController timeController = TextEditingController();
-  final TextEditingController activityController = TextEditingController();
+  final TextEditingController timeController;
+  final TextEditingController activityController;
+
+  _ItineraryEntry({String time = '', String activity = ''})
+      : timeController = TextEditingController(text: time),
+        activityController = TextEditingController(text: activity);
 }

@@ -23,7 +23,9 @@ class CartService extends ChangeNotifier {
   double get totalPrice {
     double total = 0;
     for (var item in _items) {
-      total += double.tryParse(item['harga'].toString()) ?? 0;
+      final price = double.tryParse(item['harga'].toString()) ?? 0;
+      final pax = (item['pax'] is int) ? (item['pax'] as int) : 1;
+      total += price * pax;
     }
     return total;
   }

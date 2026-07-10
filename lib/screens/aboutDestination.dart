@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import 'pax_selection_dialog.dart';
 import 'payment_screen.dart';
+import 'itinerary_screen.dart';
 import '../widgets/rating_dialog.dart';
 
 class DestinationDetailScreen extends StatefulWidget {
-  final dynamic destination;
+  final Map<String, dynamic> destination;
   const DestinationDetailScreen({super.key, required this.destination});
 
   @override
@@ -13,12 +14,22 @@ class DestinationDetailScreen extends StatefulWidget {
 }
 
 class _DestinationDetailScreenState extends State<DestinationDetailScreen> {
-  late dynamic _destination;
+  late Map<String, dynamic> _destination;
 
   @override
   void initState() {
     super.initState();
     _destination = widget.destination;
+    _loadFullDetail();
+  }
+
+  Future<void> _loadFullDetail() async {
+    try {
+      final id = int.tryParse(_destination['id_destination']?.toString() ?? '') ?? 0;
+      if (id == 0) return;
+      final full = await apiService.getDestinationById(id);
+      if (mounted) setState(() => _destination = full);
+    } catch (_) {}
   }
 
   Future<void> _refresh() async {
@@ -34,10 +45,13 @@ class _DestinationDetailScreenState extends State<DestinationDetailScreen> {
     final List<dynamic> ratings = _destination['ratings'] ?? [];
     final double averageRating = ratings.isEmpty
         ? 0.0
-        : ratings.map((r) => (r['rating'] as num)).reduce((a, b) => a + b) / ratings.length;
+        : ratings.map((r) {
+            final v = r['rating'];
+            if (v is num) return v.toDouble();
+            return (num.tryParse(v?.toString() ?? '') ?? 0).toDouble();
+          }).fold<double>(0.0, (a, b) => a + b) / ratings.length;
     final String ratingScore = averageRating.toStringAsFixed(1);
-    final String aboutParagraph =
-        _destination['deskripsi'] ?? "No description available.";
+
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -74,13 +88,18 @@ class _DestinationDetailScreenState extends State<DestinationDetailScreen> {
                         imageUrl = _destination['gambar'];
                       }
 
-                      return Positioned.fill(
-                        child: imageUrl != null && imageUrl.toString().startsWith('data:image')
-                            ? Image.memory(
-                                apiService.base64ToBytes(imageUrl.toString().split(',').last),
-                                fit: BoxFit.cover)
-                            : Image.asset('assets/images/baluran.jpg', fit: BoxFit.cover),
-                      );
+                      Widget imageWidget;
+                      if (imageUrl != null && imageUrl.toString().startsWith('data:image')) {
+                        try {
+                          final bytes = apiService.base64ToBytes(imageUrl.toString().split(',').last);
+                          imageWidget = Image.memory(bytes, fit: BoxFit.cover);
+                        } catch (e) {
+                          imageWidget = Image.asset('assets/images/baluran.jpg', fit: BoxFit.cover);
+                        }
+                      } else {
+                        imageWidget = Image.asset('assets/images/baluran.jpg', fit: BoxFit.cover);
+                      }
+                      return imageWidget;
                     },
                   ),
                   Positioned(
@@ -207,11 +226,22 @@ class _DestinationDetailScreenState extends State<DestinationDetailScreen> {
                       Row(
                         children: [
                           Expanded(
-                            child: ElevatedButton(
-                              onPressed: () => showDialog(
-                                  context: context,
-                                  builder: (_) => PaxSelectionDialog(
-                                      destination: _destination)),
+                            child:                             ElevatedButton(
+                              onPressed: () {
+                                  final id = int.tryParse(_destination['id_destination']?.toString() ?? '') ?? 0;
+                                  final itemsRaw = _destination['itinerary_items'];
+                                  final List<Map<String, dynamic>>? itemsList =
+                                      (itemsRaw is List) ? itemsRaw.cast<Map<String, dynamic>>() : null;
+                                  Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (_) => ItineraryScreen(
+                                                destinationName: destinationTitle,
+                                                destinationId: id,
+                                                itineraryItems: itemsList,
+                                                rawItineraryText: _destination['itinerary']?.toString(),
+                                              )));
+                                },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white10,
                                 padding:
@@ -219,8 +249,15 @@ class _DestinationDetailScreenState extends State<DestinationDetailScreen> {
                                 shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(16)),
                               ),
-                              child: const Text("Add to Cart",
-                                  style: TextStyle(color: Colors.white)),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.route, color: Colors.white70, size: 18),
+                                  SizedBox(width: 8),
+                                  Text("View Itinerary",
+                                      style: TextStyle(color: Colors.white)),
+                                ],
+                              ),
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -266,7 +303,7 @@ class _DestinationDetailScreenState extends State<DestinationDetailScreen> {
                                       style: const TextStyle(color: Colors.white)),
                                   subtitle: Text(r['comment'] ?? '',
                                       style: const TextStyle(color: Colors.white70)),
-                                  trailing: (r['user_id'] == 1) // Assuming current user ID 1 for simplicity, replace with real logic if possible
+                                  trailing: (r['user_id'] == apiService.currentUserId)
                                       ? IconButton(
                                           icon: const Icon(Icons.delete, color: Colors.redAccent),
                                           onPressed: () async {

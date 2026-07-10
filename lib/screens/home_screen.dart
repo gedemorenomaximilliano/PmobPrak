@@ -1,8 +1,10 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'aboutDestination.dart';
 import '../services/api_service.dart';
-import 'payment_screen.dart';
 import '../widgets/destination_card.dart';
+import '../screens/pax_selection_dialog.dart';
+import '../constants/colors.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -10,12 +12,20 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+enum SortOption { newest, oldest, priceLow, priceHigh, locationAz }
+
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 2;
   List<dynamic> _destinations = [];
-  List<dynamic> _popularDestinations = [];
   bool _isLoading = true;
   String? _error;
+  Map<String, dynamic>? _userProfile;
+  Uint8List? _profileImageBytes;
+  bool _profileLoading = true;
+  Set<int> _favoriteIds = {};
+  String _selectedCategory = 'All';
+  List<String> _categories = ['All'];
+  SortOption _sortOption = SortOption.newest;
 
   static const _navIcons = [
     Icons.search_rounded,
@@ -29,22 +39,110 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadDestinations();
+    _loadUserProfile();
+    _loadFavorites();
+  }
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final user = await apiService.getUserProfile();
+      Uint8List? bytes;
+      if (user['profile_picture'] != null) {
+        try {
+          final b64 = user['profile_picture'].toString().split(',').last;
+          bytes = apiService.base64ToBytes(b64);
+        } catch (_) {}
+      }
+      if (mounted) {
+        setState(() {
+          _userProfile = user;
+          _profileImageBytes = bytes;
+          _profileLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _profileLoading = false);
+    }
+  }
+
+  Future<void> _loadFavorites() async {
+    try {
+      final favorites = await apiService.getFavorites();
+      if (mounted) {
+        setState(() {
+          _favoriteIds = favorites
+              .map((f) => int.tryParse(f['item']?['id']?.toString() ?? '') ?? 0)
+              .where((id) => id > 0)
+              .toSet();
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadDestinations() async {
     try {
-      final destinations = await apiService.getDestinations();
-      final popular = await apiService.getPopularDestinations();
-      setState(() {
-        _destinations = destinations;
-        _popularDestinations = popular;
-        _isLoading = false;
-      });
+      final items = await apiService.getItems();
+      if (mounted) {
+        final cats = <String>{'All'};
+        for (final item in items) {
+          final cat = item['category'];
+          if (cat != null && cat is Map) {
+            final name = cat['name'];
+            if (name != null) cats.add(name.toString());
+          }
+        }
+        setState(() {
+          _destinations = items;
+          _categories = cats.toList();
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  List<dynamic> get _filteredDestinations {
+    List<dynamic> list;
+    if (_selectedCategory == 'All') {
+      list = List.from(_destinations);
+    } else {
+      list = _destinations.where((d) {
+        final cat = d['category'];
+        if (cat is Map) return cat['name']?.toString() == _selectedCategory;
+        return false;
+      }).toList();
+    }
+
+    list.sort((a, b) {
+      switch (_sortOption) {
+        case SortOption.newest:
+          return (b['date_start'] ?? '').compareTo(a['date_start'] ?? '');
+        case SortOption.oldest:
+          return (a['date_start'] ?? '').compareTo(b['date_start'] ?? '');
+        case SortOption.priceLow:
+          return _priceNum(a).compareTo(_priceNum(b));
+        case SortOption.priceHigh:
+          return _priceNum(b).compareTo(_priceNum(a));
+        case SortOption.locationAz:
+          return (a['location'] ?? '').toString().compareTo(
+              (b['location'] ?? '').toString());
+      }
+    });
+
+    return list;
+  }
+
+  double _priceNum(dynamic d) {
+    try {
+      return double.parse(d['harga'].toString());
+    } catch (_) {
+      return 0;
     }
   }
 
@@ -58,6 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
         break;
       case 2:
         _loadDestinations();
+        _loadFavorites();
         setState(() => _selectedIndex = 2);
         break;
       case 3:
@@ -69,29 +168,39 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // FIXED: Safe price formatter for the list
-  String _formatPrice(dynamic harga) {
-    if (harga == null) return 'Contact for price';
-
+  Future<void> _toggleFavorite(Map<String, dynamic> destination) async {
+    final itemId = int.tryParse(destination['id_destination']?.toString() ?? '') ?? 0;
+    if (itemId == 0) return;
+    final isFav = _favoriteIds.contains(itemId);
+    setState(() {
+      if (isFav) {
+        _favoriteIds.remove(itemId);
+      } else {
+        _favoriteIds.add(itemId);
+      }
+    });
     try {
-      String priceStr = harga.toString();
-      if (priceStr.contains('.')) {
-        priceStr = priceStr.substring(0, priceStr.indexOf('.'));
-      }
-      priceStr = priceStr.replaceAll(RegExp(r'[^0-9]'), '');
-      if (priceStr.isEmpty) return 'Contact for price';
-
-      int priceInt = int.parse(priceStr);
-      final s = priceInt.toString();
-      final buf = StringBuffer();
-      for (int i = 0; i < s.length; i++) {
-        if (i > 0 && (s.length - i) % 3 == 0) buf.write('.');
-        buf.write(s[i]);
-      }
-      return 'IDR ${buf.toString()}';
+      await apiService.toggleFavorite(itemId, isFav);
     } catch (e) {
-      return 'Contact for price';
+      setState(() {
+        if (isFav) {
+          _favoriteIds.add(itemId);
+        } else {
+          _favoriteIds.remove(itemId);
+        }
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed: $e')));
+      }
     }
+  }
+
+  void _showPaxDialog(Map<String, dynamic> destination) {
+    showDialog(
+      context: context,
+      builder: (_) => PaxSelectionDialog(destination: destination),
+    );
   }
 
   @override
@@ -118,25 +227,50 @@ class _HomeScreenState extends State<HomeScreen> {
                     ? const Center(child: CircularProgressIndicator())
                     : _error != null
                         ? Center(
-                            child: Text(_error!,
-                                style: const TextStyle(color: Colors.white)))
-                        : SingleChildScrollView(
-                            physics: const BouncingScrollPhysics(),
-                            padding: const EdgeInsets.only(bottom: 100),
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                _buildHeroText(),
-                                const SizedBox(height: 28),
-                                _buildSectionTitle('Best Destination'),
-                                const SizedBox(height: 14),
-                                _buildCards(),
-                                const SizedBox(height: 28),
-                                _buildSectionTitle('New Tours'),
-                                const SizedBox(height: 14),
-                                _buildList(),
-                                const SizedBox(height: 24),
+                                Text(_error!,
+                                    style: const TextStyle(
+                                        color: Colors.white)),
+                                const SizedBox(height: 16),
+                                TextButton.icon(
+                                  onPressed: _loadDestinations,
+                                  icon: const Icon(Icons.refresh,
+                                      color: Colors.white),
+                                  label: const Text('Tap to retry',
+                                      style:
+                                          TextStyle(color: Colors.white)),
+                                ),
                               ],
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: () async {
+                              await _loadDestinations();
+                              await _loadFavorites();
+                            },
+                            child: SingleChildScrollView(
+                              physics: const BouncingScrollPhysics(),
+                              padding:
+                                  const EdgeInsets.only(bottom: 100),
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  _buildHeroText(),
+                                  const SizedBox(height: 14),
+                                  _buildSectionTitle(
+                                      'Our Destination'),
+                                  const SizedBox(height: 8),
+                                  _buildCategoryChips(),
+                                  const SizedBox(height: 8),
+                                  _buildSortChips(),
+                                  const SizedBox(height: 12),
+                                  _buildCards(),
+                                  const SizedBox(height: 24),
+                                ],
+                              ),
                             ),
                           ),
               ),
@@ -157,38 +291,52 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: Row(
         children: [
-          FutureBuilder<Map<String, dynamic>>(
-            future: apiService.getUserProfile(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return const CircularProgressIndicator(color: Colors.white, strokeWidth: 2);
-              }
-              final user = snapshot.data!;
-              return Row(
-                children: [
-                  CircleAvatar(
+          if (_profileLoading)
+            const CircularProgressIndicator(
+                color: Colors.white, strokeWidth: 2)
+          else
+            Row(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: kAccent, width: 2),
+                  ),
+                  child: CircleAvatar(
                     radius: 18,
                     backgroundColor: Colors.white24,
-                    backgroundImage: user['image'] != null
-                        ? NetworkImage(user['image'])
+                    backgroundImage: _profileImageBytes != null
+                        ? MemoryImage(_profileImageBytes!)
                         : null,
-                    child: user['image'] == null
-                        ? const Icon(Icons.person, color: Colors.white, size: 20)
+                    child: _profileImageBytes == null
+                        ? const Icon(Icons.person,
+                            color: Colors.white, size: 20)
                         : null,
                   ),
-                  const SizedBox(width: 10),
-                  Text(
-                    user['name'] ?? 'User',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Hi, ${_userProfile?['name']?.split(' ').first ?? 'User'}',
+                      style: const TextStyle(
+                        color: kAccent,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
                     ),
-                  ),
-                ],
-              );
-            },
-          ),
+                    const Text(
+                      'Explore Banyuwangi',
+                      style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           const Spacer(),
         ],
       ),
@@ -199,17 +347,17 @@ class _HomeScreenState extends State<HomeScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: RichText(
-        text: const TextSpan(
-          style: TextStyle(height: 1.25),
+        text: TextSpan(
+          style: const TextStyle(height: 1.25),
           children: [
-            TextSpan(
+            const TextSpan(
               text: 'Discover the\n',
               style: TextStyle(
                   fontSize: 34,
                   fontWeight: FontWeight.w300,
                   color: Colors.white),
             ),
-            TextSpan(
+            const TextSpan(
               text: 'Beauty of ',
               style: TextStyle(
                   fontSize: 34,
@@ -219,9 +367,17 @@ class _HomeScreenState extends State<HomeScreen> {
             TextSpan(
               text: 'Banyuwangi',
               style: TextStyle(
-                  fontSize: 34,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF42A5F5)),
+                fontSize: 34,
+                fontWeight: FontWeight.w800,
+                foreground: Paint()
+                  ..shader = const LinearGradient(
+                    colors: [kAccent, Color(0xFF1976D2)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ).createShader(
+                    const Rect.fromLTWH(0, 0, 220, 50),
+                  ),
+              ),
             ),
           ],
         ),
@@ -234,12 +390,166 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Text(title,
           style: const TextStyle(
-              color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+              color: kAccent,
+              fontSize: 16,
+              fontWeight: FontWeight.w700)),
+    );
+  }
+
+  Widget _buildCategoryChips() {
+    return SizedBox(
+      height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: _categories.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final cat = _categories[i];
+          final isSelected = cat == _selectedCategory;
+          return GestureDetector(
+            onTap: () => setState(() => _selectedCategory = cat),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+              decoration: BoxDecoration(
+                gradient: isSelected
+                    ? const LinearGradient(
+                        colors: [kAccent, Color(0xFFFF8F00)],
+                      )
+                    : null,
+                color: isSelected ? null : Colors.white.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isSelected
+                      ? kAccent
+                      : Colors.white.withOpacity(0.12),
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: kAccent.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : [],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _categoryIcon(cat),
+                    size: 16,
+                    color: isSelected ? Colors.white70 : Colors.white54,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    cat,
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.white70,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  IconData _categoryIcon(String cat) {
+    switch (cat.toLowerCase()) {
+      case 'all':
+        return Icons.grid_view_rounded;
+      case 'alam':
+        return Icons.forest;
+      case 'budaya':
+        return Icons.museum;
+      case 'pantai':
+      case 'beach':
+        return Icons.waves;
+      case 'gunung':
+      case 'mountain':
+        return Icons.terrain;
+      case 'kuliner':
+      case 'food':
+        return Icons.restaurant;
+      case 'belanja':
+      case 'shopping':
+        return Icons.shopping_bag;
+      default:
+        return Icons.explore;
+    }
+  }
+
+  Widget _buildSortChips() {
+    final entries = [
+      (SortOption.newest, Icons.new_releases_outlined, 'Newest'),
+      (SortOption.oldest, Icons.history, 'Oldest'),
+      (SortOption.priceLow, Icons.trending_down, 'Lowest Price'),
+      (SortOption.priceHigh, Icons.trending_up, 'Highest Price'),
+      (SortOption.locationAz, Icons.location_on_outlined, 'Location'),
+    ];
+
+    return SizedBox(
+      height: 34,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: entries.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        itemBuilder: (_, i) {
+          final (option, icon, label) = entries[i];
+          final isSelected = option == _sortOption;
+          return GestureDetector(
+            onTap: () => setState(() => _sortOption = option),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Colors.white.withOpacity(0.15)
+                    : Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isSelected
+                      ? kAccent.withOpacity(0.6)
+                      : Colors.white.withOpacity(0.08),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon,
+                      size: 14,
+                      color: isSelected ? kAccent : Colors.white54),
+                  const SizedBox(width: 4),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.white60,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.w400,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 
   Widget _buildCards() {
-    if (_popularDestinations.isEmpty) {
+    final filtered = _filteredDestinations;
+    if (filtered.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(horizontal: 20),
         child: Text('No destinations available',
@@ -253,111 +563,29 @@ class _HomeScreenState extends State<HomeScreen> {
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.only(left: 20, right: 8),
-        itemCount: _popularDestinations.length,
-        itemBuilder: (_, i) =>
-            DestinationCard(destination: _popularDestinations[i]),
+        itemCount: filtered.length,
+        itemBuilder: (_, i) {
+          final d = filtered[i];
+          final itemId =
+              int.tryParse(d['id_destination']?.toString() ?? '') ?? 0;
+          return Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: SizedBox(
+              width: 200,
+              child: DestinationCard(
+                destination: d,
+                isFavorite: _favoriteIds.contains(itemId),
+                onFavoriteToggle: () => _toggleFavorite(d),
+                onAddToCart: () => _showPaxDialog(d),
+              ),
+            ),
+          );
+        },
       ),
-    );
-  }
-
-  // FIXED: The popular tours list
-  Widget _buildList() {
-    if (_destinations.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 20),
-        child:
-            Text('No tours available', style: TextStyle(color: Colors.white54)),
-      );
-    }
-
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      itemCount: _destinations.length,
-      itemBuilder: (_, i) {
-        final d = _destinations[i];
-
-        // FIXED: Use the safe formatter for price
-        final price = _formatPrice(d['harga']);
-        final rating = d['rating']?.toString() ?? '0.0';
-        final reviews = d['review'] ?? 0;
-
-        return GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => DestinationDetailScreen(destination: d)),
-          ),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A2B3E),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withOpacity(0.08)),
-            ),
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    width: 72,
-                    height: 72,
-                    color: const Color(0xFF2C3E50).withOpacity(0.3),
-                    child: const Center(
-                      child: Icon(Icons.landscape,
-                          color: Colors.white54, size: 36),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(d['nama_destination'] ?? 'Unknown',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15)),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(Icons.star,
-                              color: Color(0xFFFFA000), size: 13),
-                          const SizedBox(width: 4),
-                          Text('$rating  •  $price',
-                              style: const TextStyle(
-                                  color: Colors.white60, fontSize: 12)),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                          d['deskripsi'] == 'null' || d['deskripsi'] == null
-                              ? 'No description available'
-                              : d['deskripsi'],
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              color: Colors.white38,
-                              fontSize: 11,
-                              height: 1.4)),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Icon(Icons.arrow_forward_ios,
-                    color: Colors.white38, size: 14),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 }
 
-// Bottom navigation bar
 class _BottomNav extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onTap;
@@ -379,7 +607,8 @@ class _BottomNav extends StatelessWidget {
     final int count = icons.length;
     final double screenW = MediaQuery.of(context).size.width;
     final double slotW = screenW / count;
-    final double bubbleLeft = slotW * selectedIndex + (slotW - bubbleD) / 2;
+    final double bubbleLeft =
+        slotW * selectedIndex + (slotW - bubbleD) / 2;
 
     return SizedBox(
       height: totalH,
@@ -394,8 +623,8 @@ class _BottomNav extends StatelessWidget {
               height: barH,
               decoration: BoxDecoration(
                 color: const Color(0xFF1B3464),
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(26)),
+                borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(26)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.40),
@@ -414,19 +643,20 @@ class _BottomNav extends StatelessWidget {
               height: barH,
               child: Row(
                 children: List.generate(count, (i) {
-                  if (i == selectedIndex) return SizedBox(width: slotW);
-                  return GestureDetector(
+                  if (i == selectedIndex) {
+                    return SizedBox(width: slotW);
+                  }
+                  return InkWell(
                     onTap: () {
                       onTap(i);
-                      // Force rebuild to update gradient position
                     },
-                    behavior: HitTestBehavior.opaque,
                     child: SizedBox(
                       width: slotW,
                       height: barH,
                       child: Center(
                         child: Icon(icons[i],
-                            color: Colors.white.withOpacity(0.48), size: 25),
+                            color: Colors.white.withOpacity(0.48),
+                            size: 25),
                       ),
                     ),
                   );
@@ -438,27 +668,28 @@ class _BottomNav extends StatelessWidget {
             duration: const Duration(milliseconds: 270),
             curve: Curves.easeInOut,
             left: bubbleLeft,
-            top: 0,
+            top: (peekH + barH / 2) - bubbleD / 2,
             child: Container(
               width: bubbleD,
               height: bubbleD,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: const LinearGradient(
-                  colors: [Color(0xFFADD8F7), Color(0xFF1E88E5)],
+                  colors: [kAccent, Color(0xFFFF8F00)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF42A5F5).withOpacity(0.55),
+                    color: kAccent.withOpacity(0.55),
                     blurRadius: 14,
                     spreadRadius: 2,
                     offset: const Offset(0, 5),
                   ),
                 ],
               ),
-              child: Icon(icons[selectedIndex], color: Colors.white, size: 27),
+              child:
+                  Icon(icons[selectedIndex], color: Colors.white, size: 27),
             ),
           ),
         ],

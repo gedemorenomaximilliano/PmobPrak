@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import '../services/cart_service.dart';
-import '../constants/colors.dart';
 import '../widgets/gradient_button.dart';
 
 class PaxSelectionDialog extends StatefulWidget {
-  final dynamic destination;
+  final Map<String, dynamic> destination;
   const PaxSelectionDialog({super.key, required this.destination});
 
   @override
@@ -33,7 +32,7 @@ class _PaxSelectionDialogState extends State<PaxSelectionDialog> {
               Text('$_pax', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               IconButton(
                 icon: const Icon(Icons.add_circle_outline),
-                onPressed: () => setState(() => _pax++),
+                onPressed: () => setState(() => _pax = _pax < 20 ? _pax + 1 : _pax),
               ),
             ],
           ),
@@ -44,7 +43,7 @@ class _PaxSelectionDialogState extends State<PaxSelectionDialog> {
         GradientButton('Add to Cart', () {
           final item = Map<String, dynamic>.from(widget.destination);
           item['pax'] = _pax;
-          item['harga'] = (double.parse(item['harga'].toString()) * _pax).toString();
+          item['total_harga'] = (double.tryParse(item['harga'].toString()) ?? 0) * _pax;
           cartService.addToCart(item);
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Added to cart')));

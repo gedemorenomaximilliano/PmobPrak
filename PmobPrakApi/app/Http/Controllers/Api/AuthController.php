@@ -67,6 +67,47 @@ class AuthController extends Controller
         ];
     }
 
+    public function googleLogin(Request $request)
+    {
+        $request->validate(['id_token' => 'required|string']);
+
+        // Verify the Google ID token by calling Google's tokeninfo endpoint
+        $response = \Illuminate\Support\Facades\Http::get('https://oauth2.googleapis.com/tokeninfo', [
+            'id_token' => $request->id_token,
+        ]);
+
+        if (!$response->successful()) {
+            return response()->json(['message' => 'Invalid Google token'], 401);
+        }
+
+        $googleUser = $response->json();
+        $email = $googleUser['email'];
+        $name = $googleUser['name'] ?? $email;
+        $googleId = $googleUser['sub'];
+
+        // Find or create user
+        $user = User::where('email', $email)->first();
+        if (!$user) {
+            $user = User::create([
+                'name' => $name,
+                'email' => $email,
+                'provider' => 'google',
+                'provider_id' => $googleId,
+                'password' => null,
+            ]);
+        }
+
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return response()->json([
+            'message' => 'Hi ' . $user->name . ', welcome to home',
+            'access_token' => $token,
+            'token_type' => 'Bearer',
+            'role' => $user->role,
+            'user' => $user,
+        ]);
+    }
+
     public function updateProfile(Request $request)
     {
         $user = auth()->user();

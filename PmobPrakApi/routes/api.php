@@ -7,8 +7,9 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-Route::post('/logout', [App\Http\Controllers\Api\AuthController::class, 'logout']);
 Route::post('/login', [App\Http\Controllers\Api\AuthController::class, 'login']);
+Route::post('/login/google', [App\Http\Controllers\Api\AuthController::class, 'googleLogin']);
+Route::post('/register', [App\Http\Controllers\Api\AuthController::class, 'register']);
 
 Route::get('/categories', [App\Http\Controllers\Api\CategoryController::class, 'index']);
 Route::get('/categories/{category}', [App\Http\Controllers\Api\CategoryController::class, 'show']);
@@ -18,6 +19,7 @@ Route::get('/categories/{id}/items', [App\Http\Controllers\Api\ItemController::c
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [App\Http\Controllers\Api\AuthController::class, 'logout']);
+    Route::get('/admin/dashboard', [App\Http\Controllers\Api\AdminDashboardController::class, 'index']);
     
     Route::post('/user/profile', [App\Http\Controllers\Api\AuthController::class, 'updateProfile']);
     
@@ -28,9 +30,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/transactions', [App\Http\Controllers\Api\TransactionController::class, 'index']);
     Route::get('/transactions/{transaction}', [App\Http\Controllers\Api\TransactionController::class, 'show']);
     
+    Route::post('/payment/snap-token', [App\Http\Controllers\Api\PaymentController::class, 'createSnapToken']);
+    
     Route::get('/favorites', [App\Http\Controllers\Api\FavoriteController::class, 'index']);
     Route::post('/favorites', [App\Http\Controllers\Api\FavoriteController::class, 'store']);
     Route::delete('/favorites/{item_id}', [App\Http\Controllers\Api\FavoriteController::class, 'destroy']);
     Route::post('/ratings', [App\Http\Controllers\Api\RatingController::class, 'store']);
     Route::delete('/ratings/{id}', [App\Http\Controllers\Api\RatingController::class, 'destroy']);
 });
+
+Route::post('/payment/notification', [App\Http\Controllers\Api\PaymentController::class, 'notification']);

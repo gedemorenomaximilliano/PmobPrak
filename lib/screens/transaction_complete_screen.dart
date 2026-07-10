@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../constants/destinations.dart';
 
 class TransactionCompleteScreen extends StatefulWidget {
   final dynamic destination;
@@ -59,8 +58,8 @@ class _TransactionCompleteScreenState extends State<TransactionCompleteScreen>
 
   // Simple booking-code generator
   String get _bookingCode {
-    final hash = (widget.destination['nama_destination']?.toString() ?? 'BW' + widget.total.toString()).hashCode
-        .abs();
+    final seed = (widget.destination['nama_destination']?.toString() ?? 'BW${widget.total}');
+    final hash = seed.hashCode.isNegative ? -seed.hashCode : seed.hashCode;
     return 'BW${hash.toRadixString(36).toUpperCase().padLeft(6, '0').substring(0, 6)}';
   }
 
@@ -341,7 +340,7 @@ class _TransactionCompleteScreenState extends State<TransactionCompleteScreen>
         children: [
           Expanded(
             child: OutlinedButton(
-              onPressed: () {},
+                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Save feature coming soon'))),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.white70,
                 side: const BorderSide(color: Colors.white24),

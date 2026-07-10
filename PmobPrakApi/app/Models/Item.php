@@ -17,6 +17,7 @@ class Item extends Model
         'price',
         'stock',
         'image',
+        'itinerary',
         'rating',
         'date_start',
         'date_end'
@@ -35,5 +36,10 @@ class Item extends Model
     public function ratings()
     {
         return $this->hasMany(Rating::class);
+    }
+
+    public function itineraryItems()
+    {
+        return $this->hasMany(ItineraryItem::class)->orderBy('sort_order');
     }
 }

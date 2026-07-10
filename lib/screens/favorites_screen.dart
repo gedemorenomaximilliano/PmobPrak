@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../widgets/destination_card.dart';
-import '../constants/colors.dart';
 
 class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
@@ -13,6 +12,7 @@ class FavoritesScreen extends StatefulWidget {
 class _FavoritesScreenState extends State<FavoritesScreen> {
   List<dynamic> _favorites = [];
   bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -34,25 +34,31 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
             'gambar': item['image'],
             'rating': item['rating'],
             'stock': item['stock'],
+            'location': item['location'],
           };
         }).toList();
         _isLoading = false;
       });
     } catch (e) {
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _error = e.toString();
+      });
     }
   }
 
   Future<void> _removeFromFavorites(int itemId) async {
     try {
-      await apiService.toggleFavorite(itemId, true); // true means 'isFavorite' which will delete it
+      await apiService.toggleFavorite(itemId, true);
       _loadFavorites();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Removed from favorites')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Removed from favorites')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to remove: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed to remove: $e')));
       }
     }
   }
@@ -62,7 +68,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('My Favorites', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text('My Favorites',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -77,39 +84,78 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         ),
         child: _isLoading
             ? const Center(child: CircularProgressIndicator(color: Colors.white))
-            : _favorites.isEmpty
-                ? const Center(child: Text('No favorites yet', style: TextStyle(color: Colors.white70)))
-                : GridView.builder(
-                    padding: const EdgeInsets.only(top: 120, left: 20, right: 20),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 15,
-                      mainAxisSpacing: 15,
-                      childAspectRatio: 0.65,
+            : _error != null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline,
+                            color: Colors.white54, size: 48),
+                        const SizedBox(height: 16),
+                        Text(_error!,
+                            style: const TextStyle(color: Colors.white70),
+                            textAlign: TextAlign.center),
+                        const SizedBox(height: 16),
+                        TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _isLoading = true;
+                                _error = null;
+                              });
+                              _loadFavorites();
+                            },
+                            child: const Text('Retry',
+                                style: TextStyle(color: Colors.white))),
+                      ],
                     ),
-                    itemCount: _favorites.length,
-                    itemBuilder: (context, index) {
-                      final item = _favorites[index];
-                      return Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Positioned.fill(child: DestinationCard(destination: item, hideFavorite: true)),
-                          Positioned(
-                            top: -10,
-                            right: -10,
-                            child: GestureDetector(
-                              onTap: () => _removeFromFavorites(item['id_destination']),
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                                child: const Icon(Icons.close, color: Colors.white, size: 20),
+                  )
+                : _favorites.isEmpty
+                    ? const Center(
+                        child: Text('No favorites yet',
+                            style: TextStyle(color: Colors.white70)))
+                    : GridView.builder(
+                        padding: const EdgeInsets.only(
+                            top: 120, left: 20, right: 20),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 15,
+                          mainAxisSpacing: 15,
+                          childAspectRatio: 0.58,
+                        ),
+                        itemCount: _favorites.length,
+                        itemBuilder: (context, index) {
+                          final item = _favorites[index];
+                          return Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Positioned.fill(
+                                child: DestinationCard(
+                                  destination: item,
+                                  hideFavorite: true,
+                                  isFavorite: true,
+                                ),
                               ),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
+                              Positioned(
+                                top: -10,
+                                right: -10,
+                                child: GestureDetector(
+                                  onTap: () => _removeFromFavorites(
+                                      item['id_destination']),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle),
+                                    child: const Icon(Icons.close,
+                                        color: Colors.white, size: 20),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
       ),
     );
   }

@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ApiService {
   // Change to http://10.0.2.2:8000/api for Android emulator
   // Change to your PC's local IP for phone testing: http://YOUR_IP:8000/api
-  static const String baseUrl = 'http://192.168.1.48:8000/api';
+  static const String baseUrl = 'https://pmobprak-production.up.railway.app/api';
   static const String _tokenKey = 'auth_token';
 
   String? _authToken;

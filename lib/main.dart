@@ -13,12 +13,14 @@ import 'screens/cart_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/admin_add_item_screen.dart';
 import 'screens/explorePlaces.dart';
-import 'screens/favorites_screen.dart';
-import 'screens/transaction_history_screen.dart';
+import 'screens/tickets_screen.dart';
+import 'screens/purchase_history_screen.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await NotificationService().init();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -48,8 +50,8 @@ class JejakBanyuwangiApp extends StatelessWidget {
         '/profile': (_) => const ProfileScreen(),
         '/admin_add_item': (_) => const AdminAddItemScreen(),
         '/explore': (_) => const ExplorePlacesScreen(),
-        '/favorites': (_) => const FavoritesScreen(),
-        '/transactions': (_) => const TransactionHistoryScreen(),
+        '/tickets': (_) => const TicketsScreen(),
+        '/purchase_history': (_) => const PurchaseHistoryScreen(),
       },
     );
   }

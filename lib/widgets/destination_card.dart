@@ -6,17 +6,11 @@ import '../constants/colors.dart';
 
 class DestinationCard extends StatefulWidget {
   final Map<String, dynamic> destination;
-  final bool hideFavorite;
-  final bool isFavorite;
-  final VoidCallback? onFavoriteToggle;
   final VoidCallback? onAddToCart;
 
   const DestinationCard({
     super.key,
     required this.destination,
-    this.hideFavorite = false,
-    this.isFavorite = false,
-    this.onFavoriteToggle,
     this.onAddToCart,
   });
 
@@ -118,12 +112,6 @@ class _DestinationCardState extends State<DestinationCard> {
                 fit: StackFit.expand,
                 children: [
                   _buildDestinationImage(),
-                  if (!widget.hideFavorite)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: _buildFavoriteButton(),
-                    ),
                   if (widget.onAddToCart != null)
                     Positioned(
                       top: 8,
@@ -234,24 +222,6 @@ class _DestinationCardState extends State<DestinationCard> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFavoriteButton() {
-    return GestureDetector(
-      onTap: widget.onFavoriteToggle,
-      child: Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.4),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          widget.isFavorite ? Icons.favorite : Icons.favorite_border,
-          color: widget.isFavorite ? Colors.redAccent : Colors.white,
-          size: 18,
         ),
       ),
     );

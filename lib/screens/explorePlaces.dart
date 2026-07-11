@@ -15,13 +15,11 @@ class _ExplorePlacesScreenState extends State<ExplorePlacesScreen> {
   List<dynamic> _items = [];
   bool _isLoading = true;
   String? _error;
-  Set<int> _favoriteIds = {};
 
   @override
   void initState() {
     super.initState();
     _fetchItems();
-    _loadFavorites();
   }
 
   Future<void> _fetchItems() async {
@@ -35,44 +33,6 @@ class _ExplorePlacesScreenState extends State<ExplorePlacesScreen> {
       setState(() {
         _isLoading = false;
         _error = e.toString();
-      });
-    }
-  }
-
-  Future<void> _loadFavorites() async {
-    try {
-      final favorites = await apiService.getFavorites();
-      if (mounted) {
-        setState(() {
-          _favoriteIds = favorites
-              .map((f) => int.tryParse(f['item']?['id']?.toString() ?? '') ?? 0)
-              .where((id) => id > 0)
-              .toSet();
-        });
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _toggleFavorite(Map<String, dynamic> destination) async {
-    final itemId = int.tryParse(destination['id_destination']?.toString() ?? '') ?? 0;
-    if (itemId == 0) return;
-    final isFav = _favoriteIds.contains(itemId);
-    setState(() {
-      if (isFav) {
-        _favoriteIds.remove(itemId);
-      } else {
-        _favoriteIds.add(itemId);
-      }
-    });
-    try {
-      await apiService.toggleFavorite(itemId, isFav);
-    } catch (e) {
-      setState(() {
-        if (isFav) {
-          _favoriteIds.add(itemId);
-        } else {
-          _favoriteIds.remove(itemId);
-        }
       });
     }
   }
@@ -152,13 +112,8 @@ class _ExplorePlacesScreenState extends State<ExplorePlacesScreen> {
                             itemCount: _items.length,
                             itemBuilder: (context, index) {
                               final d = _items[index];
-                              final itemId = int.tryParse(
-                                      d['id_destination']?.toString() ?? '') ??
-                                  0;
                               return DestinationCard(
                                 destination: d,
-                                isFavorite: _favoriteIds.contains(itemId),
-                                onFavoriteToggle: () => _toggleFavorite(d),
                                 onAddToCart: () => _showPaxDialog(d),
                               );
                             },

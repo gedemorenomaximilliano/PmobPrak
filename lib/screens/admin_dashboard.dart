@@ -476,7 +476,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           'Transaction History',
           'View all bookings',
           Icons.history_edu_rounded,
-          () => Navigator.pushNamed(context, '/transactions'),
+          () => Navigator.pushNamed(context, '/purchase_history'),
         ),
       ],
     );

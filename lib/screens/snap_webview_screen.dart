@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../widgets/gradient_button.dart';
+import '../services/notification_service.dart';
 import 'transaction_complete_screen.dart';
 
 class SnapWebViewScreen extends StatefulWidget {
@@ -91,6 +92,10 @@ class _SnapWebViewScreenState extends State<SnapWebViewScreen> {
   void _navigateToComplete() {
     if (!mounted || _navPopulated) return;
     _navPopulated = true;
+
+    NotificationService().showPaymentNotification(
+      widget.destination['nama_destination'] ?? 'your destination',
+    );
 
     Navigator.pushReplacement(
       context,

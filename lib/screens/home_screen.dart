@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'aboutDestination.dart';
 import '../services/api_service.dart';
 import '../widgets/destination_card.dart';
 import '../screens/pax_selection_dialog.dart';
@@ -22,7 +21,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? _userProfile;
   Uint8List? _profileImageBytes;
   bool _profileLoading = true;
-  Set<int> _favoriteIds = {};
   String _selectedCategory = 'All';
   List<String> _categories = ['All'];
   SortOption _sortOption = SortOption.newest;
@@ -31,7 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
     Icons.search_rounded,
     Icons.shopping_cart_outlined,
     Icons.home_outlined,
-    Icons.favorite_border,
+    Icons.confirmation_number_outlined,
     Icons.person_outline,
   ];
 
@@ -40,7 +38,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadDestinations();
     _loadUserProfile();
-    _loadFavorites();
   }
 
   Future<void> _loadUserProfile() async {
@@ -63,20 +60,6 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (mounted) setState(() => _profileLoading = false);
     }
-  }
-
-  Future<void> _loadFavorites() async {
-    try {
-      final favorites = await apiService.getFavorites();
-      if (mounted) {
-        setState(() {
-          _favoriteIds = favorites
-              .map((f) => int.tryParse(f['item']?['id']?.toString() ?? '') ?? 0)
-              .where((id) => id > 0)
-              .toSet();
-        });
-      }
-    } catch (_) {}
   }
 
   Future<void> _loadDestinations() async {
@@ -156,43 +139,14 @@ class _HomeScreenState extends State<HomeScreen> {
         break;
       case 2:
         _loadDestinations();
-        _loadFavorites();
         setState(() => _selectedIndex = 2);
         break;
       case 3:
-        Navigator.pushNamed(context, '/favorites');
+        Navigator.pushNamed(context, '/tickets');
         break;
       case 4:
         Navigator.pushNamed(context, '/profile');
         break;
-    }
-  }
-
-  Future<void> _toggleFavorite(Map<String, dynamic> destination) async {
-    final itemId = int.tryParse(destination['id_destination']?.toString() ?? '') ?? 0;
-    if (itemId == 0) return;
-    final isFav = _favoriteIds.contains(itemId);
-    setState(() {
-      if (isFav) {
-        _favoriteIds.remove(itemId);
-      } else {
-        _favoriteIds.add(itemId);
-      }
-    });
-    try {
-      await apiService.toggleFavorite(itemId, isFav);
-    } catch (e) {
-      setState(() {
-        if (isFav) {
-          _favoriteIds.add(itemId);
-        } else {
-          _favoriteIds.remove(itemId);
-        }
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Failed: $e')));
-      }
     }
   }
 
@@ -248,7 +202,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         : RefreshIndicator(
                             onRefresh: () async {
                               await _loadDestinations();
-                              await _loadFavorites();
                             },
                             child: SingleChildScrollView(
                               physics: const BouncingScrollPhysics(),
@@ -566,16 +519,12 @@ class _HomeScreenState extends State<HomeScreen> {
         itemCount: filtered.length,
         itemBuilder: (_, i) {
           final d = filtered[i];
-          final itemId =
-              int.tryParse(d['id_destination']?.toString() ?? '') ?? 0;
           return Padding(
             padding: const EdgeInsets.only(right: 12),
             child: SizedBox(
               width: 200,
               child: DestinationCard(
                 destination: d,
-                isFavorite: _favoriteIds.contains(itemId),
-                onFavoriteToggle: () => _toggleFavorite(d),
                 onAddToCart: () => _showPaxDialog(d),
               ),
             ),

@@ -159,10 +159,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       _buildInfoCard(),
                       const SizedBox(height: 24),
                       _buildMenuTile(
+                        Icons.confirmation_number_outlined,
+                        'My Tickets',
+                        'View your e-tickets and QR codes',
+                        () => Navigator.pushNamed(context, '/tickets'),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildMenuTile(
                         Icons.receipt_long_rounded,
                         'Purchase History',
-                        'View your bookings and tickets',
-                        () => Navigator.pushNamed(context, '/transactions'),
+                        'View your booking history',
+                        () => Navigator.pushNamed(context, '/purchase_history'),
                       ),
                       const SizedBox(height: 24),
                       SizedBox(

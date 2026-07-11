@@ -207,7 +207,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   List<Widget> _buildRevenueChart() {
     final list = (_stats!['monthly_revenue'] as List).cast<Map<String, dynamic>>();
-    final maxY = list.fold<double>(0, (p, e) => p > (e['total'] as num).toDouble() ? p : (e['total'] as num).toDouble());
+    final maxY = list.fold<double>(0, (p, e) { final v = double.tryParse(e['total'].toString()) ?? 0; return p > v ? p : v; });
     return [
       Row(
         children: [
@@ -274,7 +274,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 x: e.key,
                 barRods: [
                   BarChartRodData(
-                    toY: (e.value['total'] as num).toDouble(),
+                    toY: double.tryParse(e.value['total'].toString()) ?? 0,
                     color: Colors.greenAccent,
                     width: 14,
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
@@ -290,7 +290,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   List<Widget> _buildUsersChart() {
     final list = (_stats!['monthly_users'] as List).cast<Map<String, dynamic>>();
-    final maxY = list.fold<double>(0, (p, e) => p > (e['count'] as num).toDouble() ? p : (e['count'] as num).toDouble());
+    final maxY = list.fold<double>(0, (p, e) { final v = double.tryParse(e['count'].toString()) ?? 0; return p > v ? p : v; });
     return [
       const SizedBox(height: 4),
       Row(
@@ -357,7 +357,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 x: e.key,
                 barRods: [
                   BarChartRodData(
-                    toY: (e.value['count'] as num).toDouble(),
+                    toY: double.tryParse(e.value['count'].toString()) ?? 0,
                     color: Colors.blueAccent,
                     width: 14,
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),

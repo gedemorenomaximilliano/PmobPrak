@@ -53,7 +53,7 @@ class AdminDashboardController extends Controller
             ->map(function ($tx) {
                 return [
                     'id' => $tx->id,
-                    'user_name' => $tx->user->name ?? 'Unknown',
+                    'user_name' => $tx->user?->name ?? 'Unknown',
                     'total_price' => $tx->total_price,
                     'status' => $tx->status,
                     'created_at' => $tx->created_at,

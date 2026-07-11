@@ -157,7 +157,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 32),
                       _buildInfoCard(),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
+                      _buildMenuTile(
+                        Icons.receipt_long_rounded,
+                        'Purchase History',
+                        'View your bookings and tickets',
+                        () => Navigator.pushNamed(context, '/transactions'),
+                      ),
+                      const SizedBox(height: 24),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
@@ -231,6 +238,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _infoRow(Icons.phone_outlined, 'Phone', _user?['phone'] ?? 'N/A'),
           _infoRow(Icons.security_outlined, 'Role', _user?['role'] ?? 'User'),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMenuTile(IconData icon, String title, String subtitle, VoidCallback onTap) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+        leading: Icon(icon, color: const Color(0xFF42A5F5), size: 22),
+        title: Text(title,
+            style: const TextStyle(
+                fontWeight: FontWeight.w600, color: Colors.white, fontSize: 14)),
+        subtitle: Text(subtitle,
+            style: const TextStyle(fontSize: 11, color: Colors.white54)),
+        trailing:
+            const Icon(Icons.chevron_right, color: Colors.white38, size: 20),
+        onTap: onTap,
       ),
     );
   }
